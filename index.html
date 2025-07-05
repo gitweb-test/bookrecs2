@@ -1,76 +1,120 @@
-<script>
-  async function findRecommendations() {
-    const query = document.getElementById('bookInput').value.trim();
-    const resultsDiv = document.getElementById('results');
-    resultsDiv.innerHTML = 'Loading...';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Book Recommender</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2rem;
+      background: #f4f4f4;
+    }
+    h1 {
+      color: #222;
+    }
+    input {
+      padding: 0.5rem;
+      width: 300px;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      margin-left: 0.5rem;
+    }
+    .book-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .book {
+      background: white;
+      padding: 1rem;
+      border-radius: 6px;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .book img {
+      height: 200px;
+      object-fit: cover;
+      margin-bottom: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>📖 Book Recommender</h1>
+  <p>Type a book you liked and get similar recommendations:</p>
+  <input type="text" id="bookInput" placeholder="e.g. The Hobbit" />
+  <button onclick="findRecommendations()">Search</button>
 
-    try {
-      // Step 1: Search for the book
-      const searchRes = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(query)}`);
-      const searchData = await searchRes.json();
+  <div id="results" class="book-grid"></div>
 
-      if (!searchData.docs.length) {
-        resultsDiv.innerHTML = 'No results found.';
-        return;
-      }
-
-      // Step 2: Pick the first result
-      const book = searchData.docs[0];
-      const workKey = book.key; // e.g. "/works/OL123W"
-      const fallbackSubjects = book.subject_facet;
-
-      let subjects = [];
+  <script>
+    async function findRecommendations() {
+      const query = document.getElementById('bookInput').value.trim();
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = 'Loading...';
 
       try {
-        // Step 3: Try to get subjects from work details
-        const workRes = await fetch(`https://openlibrary.org${workKey}.json`);
-        const workData = await workRes.json();
-        subjects = workData.subjects || [];
-      } catch (e) {
-        console.warn('Failed to load work details, falling back to search subjects');
+        const searchRes = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(query)}`);
+        const searchData = await searchRes.json();
+        if (!searchData.docs.length) {
+          resultsDiv.innerHTML = 'No results found.';
+          return;
+        }
+
+        const book = searchData.docs[0];
+        const workKey = book.key;
+        const fallbackSubjects = book.subject_facet || [];
+
+        let subjects = [];
+
+        try {
+          const workRes = await fetch(`https://openlibrary.org${workKey}.json`);
+          const workData = await workRes.json();
+          subjects = workData.subjects || [];
+        } catch (e) {
+          console.warn("Couldn't get detailed subjects, using fallback.");
+        }
+
+        if (subjects.length === 0 && fallbackSubjects.length > 0) {
+          subjects = fallbackSubjects;
+        }
+
+        if (subjects.length === 0) {
+          resultsDiv.innerHTML = 'No subjects found for this book.';
+          return;
+        }
+
+        const subject = encodeURIComponent(subjects[0]);
+        const recRes = await fetch(`https://openlibrary.org/subjects/${subject}.json?limit=12`);
+        const recData = await recRes.json();
+
+        if (!recData.works || recData.works.length === 0) {
+          resultsDiv.innerHTML = 'No recommendations found.';
+          return;
+        }
+
+        resultsDiv.innerHTML = '';
+        recData.works.forEach(book => {
+          const cover = book.cover_id
+            ? `https://covers.openlibrary.org/b/id/${book.cover_id}-M.jpg`
+            : 'https://via.placeholder.com/150x200?text=No+Cover';
+
+          const div = document.createElement('div');
+          div.className = 'book';
+          div.innerHTML = `
+            <img src="${cover}" alt="${book.title}">
+            <div><strong>${book.title}</strong></div>
+            <div>${book.authors?.[0]?.name || ''}</div>
+          `;
+          resultsDiv.appendChild(div);
+        });
+      } catch (err) {
+        console.error(err);
+        resultsDiv.innerHTML = 'Something went wrong. Try again.';
       }
-
-      if (subjects.length === 0 && fallbackSubjects) {
-        subjects = fallbackSubjects;
-      }
-
-      if (!subjects || subjects.length === 0) {
-        resultsDiv.innerHTML = 'No subjects found for this book.';
-        return;
-      }
-
-      const mainSubject = encodeURIComponent(subjects[0]);
-
-      // Step 4: Get books in same subject
-      const subjectRes = await fetch(`https://openlibrary.org/subjects/${mainSubject}.json?limit=12`);
-      const subjectData = await subjectRes.json();
-
-      if (!subjectData.works || subjectData.works.length === 0) {
-        resultsDiv.innerHTML = 'No recommendations found.';
-        return;
-      }
-
-      // Step 5: Render recommendations
-      resultsDiv.innerHTML = '';
-      subjectData.works.forEach(book => {
-        const coverId = book.cover_id;
-        const coverUrl = coverId
-          ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`
-          : 'https://via.placeholder.com/150x200?text=No+Cover';
-        
-        const bookDiv = document.createElement('div');
-        bookDiv.className = 'book';
-        bookDiv.innerHTML = `
-          <img src="${coverUrl}" alt="${book.title}">
-          <div><strong>${book.title}</strong></div>
-          <div>${book.authors?.[0]?.name || ''}</div>
-        `;
-        resultsDiv.appendChild(bookDiv);
-      });
-
-    } catch (error) {
-      console.error(error);
-      resultsDiv.innerHTML = 'Something went wrong. Please try another title.';
     }
-  }
-</script>
+  </script>
+</body>
+</html>
