@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Book Recommender</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      background: #f9f9f9;
+    }
+    h1 {
+      color: #333;
+    }
+    input {
+      padding: 0.5rem;
+      width: 300px;
+      font-size: 1rem;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      margin-left: 0.5rem;
+      cursor: pointer;
+    }
+    .book-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .book {
+      background: white;
+      padding: 1rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    .book img {
+      height: 200px;
+      object-fit: cover;
+      margin-bottom: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>📚 Book Recommender</h1>
+  <p>Enter a book you liked:</p>
+  <input type="text" id="bookInput" placeholder="e.g. The Hobbit" />
+  <button onclick="findRecommendations()">Get Recommendations</button>
+
+  <div id="results" class="book-grid"></div>
+
+  <script>
+    async function findRecommendations() {
+      const query = document.getElementById('bookInput').value;
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = 'Loading...';
+
+      try {
+        // Step 1: Search for the book
+        const searchRes = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(query)}`);
+        const searchData = await searchRes.json();
+
+        if (!searchData.docs.length) {
+          resultsDiv.innerHTML = 'No results found.';
+          return;
+        }
+
+        // Step 2: Pick the first result
+        const book = searchData.docs[0];
+        const workKey = book.key; // e.g. "/works/OL123W"
+        
+        // Step 3: Get work details to find subjects
+        const workRes = await fetch(`https://openlibrary.org${workKey}.json`);
+        const workData = await workRes.json();
+
+        const subjects = workData.subjects;
+        if (!subjects || subjects.length === 0) {
+          resultsDiv.innerHTML = 'No subjects found for this book.';
+          return;
+        }
+
+        const mainSubject = encodeURIComponent(subjects[0]);
+
+        // Step 4: Get books in same subject
+        const subjectRes = await fetch(`https://openlibrary.org/subjects/${mainSubject}.json?limit=12`);
+        const subjectData = await subjectRes.json();
+
+        // Step 5: Render recommendations
+        resultsDiv.innerHTML = '';
+        subjectData.works.forEach(book => {
+          const coverId = book.cover_id;
+          const coverUrl = coverId
+            ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`
+            : 'https://via.placeholder.com/150x200?text=No+Cover';
+          
+          const bookDiv = document.createElement('div');
+          bookDiv.className = 'book';
+          bookDiv.innerHTML = `
+            <img src="${coverUrl}" alt="${book.title}">
+            <div><strong>${book.title}</strong></div>
+            <div>${book.authors?.[0]?.name || ''}</div>
+          `;
+          resultsDiv.appendChild(bookDiv);
+        });
+
+      } catch (error) {
+        console.error(error);
+        resultsDiv.innerHTML = 'Something went wrong.';
+      }
+    }
+  </script>
+</body>
+</html>
