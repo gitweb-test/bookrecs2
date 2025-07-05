@@ -65,7 +65,7 @@
 
         const book = searchData.docs[0];
         const workKey = book.key;
-        const fallbackSubjects = book.subject_facet || [];
+        const fallbackSubjects = book.subject_facet || book.subject || [];
 
         let subjects = [];
 
@@ -74,7 +74,7 @@
           const workData = await workRes.json();
           subjects = workData.subjects || [];
         } catch (e) {
-          console.warn("Couldn't get detailed subjects, using fallback.");
+          console.warn("Couldn't load work subjects, using fallback.");
         }
 
         if (subjects.length === 0 && fallbackSubjects.length > 0) {
@@ -111,7 +111,7 @@
           resultsDiv.appendChild(div);
         });
       } catch (err) {
-        console.error(err);
+        console.error('Fetch error:', err);
         resultsDiv.innerHTML = 'Something went wrong. Try again.';
       }
     }
