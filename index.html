@@ -1,78 +1,98 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Book Recommender with CORS Proxy</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 700px;
-      margin: 2rem auto;
-      padding: 0 1rem;
-      background: #fafafa;
-      color: #222;
-    }
-    h1 {
-      text-align: center;
-    }
-    input, button {
-      padding: 0.5rem;
-      font-size: 1rem;
-    }
-    input {
-      width: 70%;
-    }
-    button {
-      width: 25%;
-      margin-left: 1%;
-      cursor: pointer;
-    }
-    #results {
-      margin-top: 2rem;
-      display: grid;
-      grid-template-columns: repeat(auto-fill,minmax(140px,1fr));
-      gap: 1rem;
-    }
-    .book {
-      background: white;
-      padding: 1rem;
-      border-radius: 6px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-      text-align: center;
-    }
-    .book img {
-      height: 180px;
-      object-fit: cover;
-      margin-bottom: 0.5rem;
-      border-radius: 4px;
-    }
-    .error {
-      color: red;
-      text-align: center;
-      margin-top: 1rem;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gutendex Book Recommender</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 700px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    background: #fafafa;
+    color: #222;
+  }
+  h1 {
+    text-align: center;
+  }
+  input, button {
+    padding: 0.5rem;
+    font-size: 1rem;
+  }
+  input {
+    width: 70%;
+  }
+  button {
+    width: 25%;
+    margin-left: 1%;
+    cursor: pointer;
+  }
+  #results, #recommendations {
+    margin-top: 2rem;
+  }
+  .book {
+    background: white;
+    padding: 1rem;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+  }
+  .book-title {
+    font-weight: bold;
+    font-size: 1.2rem;
+  }
+  .book-author {
+    font-style: italic;
+    margin-bottom: 0.5rem;
+  }
+  .rec-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill,minmax(140px,1fr));
+    gap: 1rem;
+  }
+  .rec-book {
+    background: white;
+    padding: 0.5rem;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    text-align: center;
+  }
+  .rec-book img {
+    height: 180px;
+    object-fit: cover;
+    margin-bottom: 0.3rem;
+    border-radius: 4px;
+  }
+  .error {
+    color: red;
+    text-align: center;
+    margin-top: 1rem;
+  }
+</style>
 </head>
 <body>
 
-<h1>Book Recommender</h1>
+<h1>Gutendex Book Recommender</h1>
+
 <div>
-  <input type="text" id="bookInput" placeholder="Enter a book title, e.g. The Hobbit" />
+  <input type="text" id="bookInput" placeholder="Enter a book title, e.g. Pride and Prejudice" />
   <button id="searchBtn">Search</button>
 </div>
 
 <div id="results"></div>
+<div id="recommendations"></div>
 <div id="error" class="error"></div>
 
 <script>
-  const corsProxy = 'https://corsproxy.io/?';
+  const resultsDiv = document.getElementById('results');
+  const recDiv = document.getElementById('recommendations');
+  const errorDiv = document.getElementById('error');
 
   document.getElementById('searchBtn').addEventListener('click', async () => {
     const query = document.getElementById('bookInput').value.trim();
-    const resultsDiv = document.getElementById('results');
-    const errorDiv = document.getElementById('error');
     resultsDiv.innerHTML = '';
+    recDiv.innerHTML = '';
     errorDiv.textContent = '';
 
     if (!query) {
@@ -80,76 +100,72 @@
       return;
     }
 
-    resultsDiv.textContent = 'Loading...';
+    resultsDiv.textContent = 'Searching...';
 
     try {
-      // Search for the book by title (using CORS proxy)
-      const searchUrl = `https://openlibrary.org/search.json?title=${encodeURIComponent(query)}&limit=1`;
-      const searchRes = await fetch(corsProxy + searchUrl);
-      const searchText = await searchRes.text();
-      const searchData = JSON.parse(searchText);
+      // Search for books by title
+      const searchRes = await fetch(`https://gutendex.com/books?search=${encodeURIComponent(query)}&page=1`);
+      const searchData = await searchRes.json();
 
-      if (!searchData.docs.length) {
+      if (!searchData.results.length) {
         resultsDiv.textContent = '';
         errorDiv.textContent = 'No book found with that title.';
         return;
       }
 
-      const firstBook = searchData.docs[0];
-      const workKey = firstBook.key; // e.g. "/works/OL123W"
+      // Take first matched book
+      const book = searchData.results[0];
 
-      // Get work details to find subjects (using CORS proxy)
-      const workUrl = `https://openlibrary.org${workKey}.json`;
-      const workRes = await fetch(corsProxy + workUrl);
-      const workText = await workRes.text();
-      const workData = JSON.parse(workText);
+      // Show found book
+      resultsDiv.innerHTML = `
+        <div class="book">
+          <div class="book-title">${book.title}</div>
+          <div class="book-author">by ${book.authors.map(a => a.name).join(', ') || 'Unknown'}</div>
+          <img src="${book.formats['image/jpeg'] || ''}" alt="${book.title}" style="max-height:250px; display:block; margin:auto;"/>
+          <p><a href="${book.formats['text/html; charset=utf-8'] || book.formats['text/html'] || '#'}" target="_blank" rel="noopener">Read this book</a></p>
+        </div>
+      `;
 
-      const subjects = workData.subjects || firstBook.subject_facet || [];
+      recDiv.textContent = 'Loading recommendations...';
 
-      if (subjects.length === 0) {
-        resultsDiv.textContent = '';
-        errorDiv.textContent = 'No subjects found for this book, so no recommendations available.';
+      // Get recommendations: find other books by the same author(s)
+      let authorName = book.authors.length ? book.authors[0].name : null;
+
+      if (!authorName) {
+        recDiv.textContent = 'No author info available, cannot generate recommendations.';
         return;
       }
 
-      // Use first subject to get related books (using CORS proxy)
-      const subject = encodeURIComponent(subjects[0]);
-      const subjectUrl = `https://openlibrary.org/subjects/${subject}.json?limit=10`;
-      const subjectRes = await fetch(corsProxy + subjectUrl);
-      const subjectText = await subjectRes.text();
-      const subjectData = JSON.parse(subjectText);
+      const recRes = await fetch(`https://gutendex.com/books?search=author:${encodeURIComponent(authorName)}&page=1`);
+      const recData = await recRes.json();
 
-      if (!subjectData.works || subjectData.works.length === 0) {
-        resultsDiv.textContent = '';
-        errorDiv.textContent = 'No recommendations found for this subject.';
+      // Filter out the current book from recommendations
+      const recBooks = recData.results.filter(b => b.id !== book.id);
+
+      if (!recBooks.length) {
+        recDiv.textContent = 'No recommendations found for this author.';
         return;
       }
 
-      // Display recommended books
-      resultsDiv.innerHTML = '';
+      recDiv.innerHTML = `<h2>More books by ${authorName}</h2><div class="rec-list"></div>`;
+      const recList = recDiv.querySelector('.rec-list');
 
-      subjectData.works.forEach(book => {
-        const coverUrl = book.cover_id 
-          ? `https://covers.openlibrary.org/b/id/${book.cover_id}-M.jpg`
-          : 'https://via.placeholder.com/140x180?text=No+Cover';
-
-        const author = book.authors && book.authors.length ? book.authors[0].name : '';
-
-        const bookDiv = document.createElement('div');
-        bookDiv.className = 'book';
-        bookDiv.innerHTML = `
-          <img src="${coverUrl}" alt="${book.title}">
-          <strong>${book.title}</strong><br/>
-          <em>${author}</em>
+      recBooks.slice(0, 10).forEach(b => {
+        const cover = b.formats['image/jpeg'] || 'https://via.placeholder.com/140x180?text=No+Cover';
+        const el = document.createElement('div');
+        el.className = 'rec-book';
+        el.innerHTML = `
+          <img src="${cover}" alt="${b.title}" />
+          <div><strong>${b.title}</strong></div>
         `;
-
-        resultsDiv.appendChild(bookDiv);
+        recList.appendChild(el);
       });
 
-    } catch (err) {
+    } catch (e) {
       resultsDiv.textContent = '';
+      recDiv.textContent = '';
       errorDiv.textContent = 'An error occurred. Please try again.';
-      console.error(err);
+      console.error(e);
     }
   });
 </script>
