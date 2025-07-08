@@ -1,404 +1,393 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <title>Book Recommender</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
+    :root {
+      --bg: #f9f9f9;
+      --fg: #222;
+      --card-bg: #fff;
+      --primary: #4CAF50;
+      --primary-hover: #45a049;
+      --accent: #ff9900;
+      --accent-hover: #e68a00;
+    }
+    [data-theme="dark"] {
+      --bg: #121212;
+      --fg: #eee;
+      --card-bg: #1e1e1e;
+      --primary: #388E3C;
+      --primary-hover: #2e7d32;
+      --accent: #FFA000;
+      --accent-hover: #ff8f00;
+    }
+    * { box-sizing: border-box; }
     body {
+      margin: 0;
       font-family: Arial, sans-serif;
-      padding: 20px;
-      max-width: 700px;
-      margin: auto;
-      background-color: #f9f9f9;
-    }
-
-    h1 {
-      text-align: center;
-    }
-
-    input, button {
-      padding: 10px;
-      font-size: 1rem;
-      margin-top: 10px;
-      width: 100%;
-      box-sizing: border-box;
-    }
-
-    #bookInput {
-      padding-right: 40px;
-    }
-
-    button {
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background-color: #45a049;
-    }
-
-    .autocomplete-container {
-      position: relative;
-    }
-
-    .autocomplete-suggestions {
-      border: 1px solid #ccc;
-      border-top: none;
-      max-height: 200px;
-      overflow-y: auto;
-      background: white;
-      position: absolute;
-      top: 100%;
-      left: 0;
-      width: 100%;
-      z-index: 1000;
-    }
-
-    .autocomplete-suggestion {
-      padding: 10px;
-      cursor: pointer;
-      border-bottom: 1px solid #eee;
-    }
-
-    .autocomplete-suggestion:hover {
-      background-color: #f0f0f0;
-    }
-
-    .bold-title {
-      font-weight: bold;
-    }
-
-    .book {
+      background: var(--bg);
+      color: var(--fg);
       display: flex;
-      gap: 15px;
-      margin-top: 15px;
-      padding: 10px;
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 8px;
+      flex-direction: column;
+      min-height: 100vh;
     }
-
-    .book img {
-      max-width: 100px;
-      height: auto;
-      flex-shrink: 0;
-      border-radius: 4px;
-    }
-
-    .book-info {
-      flex: 1;
-    }
-
-    .book-info p {
-      margin: 10px 0;
-    }
-
-    .spinner {
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #4CAF50;
-      border-radius: 50%;
-      width: 24px;
-      height: 24px;
-      animation: spin 1s linear infinite;
-      margin: 10px auto;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
-    .clear-btn {
-      position: absolute;
-      right: 10px;
-      top: 50%;
-      transform: translateY(-50%);
-      background: #f0f0f0;
-      border: none;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      font-size: 1rem;
-      cursor: pointer;
-      display: none;
-      line-height: 20px;
+    header, footer {
+      padding: 1rem;
       text-align: center;
+      background: var(--card-bg);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-
-    .clear-btn:hover {
-      background: #e0e0e0;
+    main {
+      flex: 1;
+      padding: 1rem;
+      max-width: 800px;
+      margin: auto;
+      width: 100%;
     }
-
-    .autocomplete-container.has-text .clear-btn {
-      display: block;
+    h1 { margin: .5rem 0; }
+    button, input {
+      font-size: 1rem;
+      padding: .75rem;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      outline: none;
+    }
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    button:hover { background: var(--primary-hover); }
+    .accent-btn {
+      background: var(--accent);
+    }
+    .accent-btn:hover { background: var(--accent-hover); }
+    .flex { display: flex; gap: .5rem; }
+    .flex-center { align-items: center; }
+    .autocomplete-container { position: relative; width: 100%; }
+    #bookInput { width: 100%; }
+    .suggestions {
+      position: absolute;
+      top: 100%; left: 0; right: 0;
+      background: var(--card-bg);
+      border: 1px solid #ccc;
+      max-height: 200px; overflow-y: auto;
+      z-index: 10;
+      display: none;
+    }
+    .suggestion { padding: .5rem; cursor: pointer; }
+    .suggestion.active, .suggestion:hover { background: #ddd; }
+    #spinner {
+      display: none;
+      width: 50px; height: 50px;
+      border: 5px solid #ccc;
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin: 1rem auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .book {
+      display: flex; gap: 1rem;
+      background: var(--card-bg);
+      padding: 1rem; margin: 1rem 0;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .book img { width: 80px; border-radius: 4px; }
+    .book-info { flex: 1; }
+    .book-actions { margin-top: .5rem; }
+    .book-actions a, .book-actions button {
+      margin-right: .5rem;
+      text-decoration: none;
+    }
+    .hidden { display: none !important; }
+    .list-section { margin-top: 2rem; }
+    .list-section h2 { margin-bottom: .5rem; }
+    .list-section ul { list-style: none; padding: 0; }
+    .list-section li {
+      background: var(--card-bg);
+      margin: .25rem 0; padding: .5rem;
+      border-radius: 4px;
+      display: flex; justify-content: space-between;
+    }
+    @media (max-width: 600px) {
+      .book { flex-direction: column; align-items: center; }
+      .book img { width: 100px; }
+      .flex { flex-direction: column; }
     }
   </style>
 </head>
 <body>
-  <h1>📚 Book Recommender</h1>
-  <p>Enter a book you like, and we'll recommend 10 similar ones using Google Books.</p>
+  <header>
+    <div class="flex flex-center">
+      <h1>📚 Book Recommender</h1>
+      <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+    </div>
+    <p>Enter a book you like, and we'll recommend 10 similar ones.</p>
+  </header>
+  <main>
+    <section aria-labelledby="search-label">
+      <div class="autocomplete-container">
+        <label id="search-label" class="sr-only">Book title</label>
+        <input id="bookInput" type="text" placeholder="e.g. Slaughterhouse-Five by Kurt Vonnegut" autocomplete="off" aria-autocomplete="list" aria-controls="suggestions" />
+        <div id="suggestions" class="suggestions" role="listbox"></div>
+      </div>
+      <div class="flex" style="margin-top:1rem">
+        <button id="searchBtn">Get Recommendations</button>
+        <button id="viewFavorites" class="accent-btn">View Favorites</button>
+      </div>
+      <div id="recentSearches" class="list-section hidden" aria-labelledby="recent-label">
+        <h2 id="recent-label">Recent Searches</h2>
+        <ul></ul>
+      </div>
+    </section>
 
-  <div class="autocomplete-container">
-    <input id="bookInput" type="text" placeholder="e.g. Slaughterhouse-Five" autocomplete="off" />
-    <button class="clear-btn" onclick="clearInput()">✖</button>
-    <div id="autocomplete-list" class="autocomplete-suggestions"></div>
-  </div>
+    <div id="spinner" role="status" aria-live="polite"></div>
+    <div id="results" aria-live="polite"></div>
 
-  <button onclick="getRecommendations()">Get Recommendations</button>
-  <div id="results"></div>
+    <section id="favoritesSection" class="list-section hidden" aria-labelledby="fav-label">
+      <h2 id="fav-label">My Favorites <button id="clearFav" title="Clear all favorites">🗑️</button></h2>
+      <ul></ul>
+    </section>
+  </main>
+  <footer>
+    <p>&copy; 2025 Book Recommender</p>
+  </footer>
 
   <script>
-    const bookInput = document.getElementById("bookInput");
-    const suggestionsBox = document.getElementById("autocomplete-list");
-    const resultsDiv = document.getElementById("results");
-
-    function clearInput() {
-      bookInput.value = "";
-      bookInput.dispatchEvent(new Event('input'));
-      suggestionsBox.innerHTML = "";
-      resultsDiv.innerHTML = "";
+    // -- Utils --
+    function debounce(fn, delay) {
+      let timer;
+      return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), delay);
+      };
     }
-
-    function similarity(s1, s2) {
-      const longer = s1.length > s2.length ? s1 : s2;
-      const shorter = s1.length > s2.length ? s2 : s1;
-      const longerLength = longer.length;
-      if (longerLength === 0) return 1.0;
-      return (longerLength - editDistance(longer, shorter)) / longerLength;
+    function showSpinner(show) {
+      document.getElementById('spinner').style.display = show ? 'block' : 'none';
     }
+    // -- Theme Toggle --
+    const html = document.documentElement;
+    const themeToggle = document.getElementById('themeToggle');
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    html.setAttribute('data-theme', savedTheme);
+    themeToggle.addEventListener('click', () => {
+      const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+    });
 
-    function editDistance(s1, s2) {
-      s1 = s1.toLowerCase();
-      s2 = s2.toLowerCase();
+    // -- Recent Searches --
+    const recentEl = document.querySelector('#recentSearches ul');
+    function loadRecents() {
+      const rec = JSON.parse(localStorage.getItem('recentSearches')||'[]');
+      recentEl.innerHTML = '';
+      if (!rec.length) return document.getElementById('recentSearches').classList.add('hidden');
+      document.getElementById('recentSearches').classList.remove('hidden');
+      rec.slice(-5).reverse().forEach(q => {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.textContent = q;
+        btn.addEventListener('click', ()=> { bookInput.value = q; getRecommendations(); });
+        li.appendChild(btn);
+        recentEl.appendChild(li);
+      });
+    }
+    function saveRecent(q) {
+      let rec = JSON.parse(localStorage.getItem('recentSearches')||'[]');
+      rec = rec.filter(x=>x!==q);
+      rec.push(q);
+      if (rec.length>10) rec.shift();
+      localStorage.setItem('recentSearches', JSON.stringify(rec));
+      loadRecents();
+    }
+    loadRecents();
 
-      const costs = [];
-      for (let i = 0; i <= s1.length; i++) {
-        let lastValue = i;
-        for (let j = 0; j <= s2.length; j++) {
-          if (i === 0) costs[j] = j;
-          else {
-            if (j > 0) {
-              let newValue = costs[j - 1];
-              if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
-                newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-              }
-              costs[j - 1] = lastValue;
-              lastValue = newValue;
-            }
-          }
-        }
-        if (i > 0) costs[s2.length] = lastValue;
+    // -- Favorites --
+    const favSection = document.getElementById('favoritesSection');
+    const favList = favSection.querySelector('ul');
+    function loadFavorites() {
+      const favs = JSON.parse(localStorage.getItem('favorites')||'[]');
+      favList.innerHTML = '';
+      if (!favs.length) return favSection.classList.add('hidden');
+      favSection.classList.remove('hidden');
+      favs.forEach(book => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${book.title} by ${book.authors.join(', ')}</span>
+          <button title="Remove" data-id="${book.id}">❌</button>`;
+        favList.appendChild(li);
+      });
+    }
+    document.getElementById('viewFavorites').addEventListener('click', () => {
+      loadFavorites();
+      favSection.classList.toggle('hidden');
+    });
+    document.getElementById('clearFav').addEventListener('click', () => {
+      localStorage.removeItem('favorites');
+      loadFavorites();
+    });
+    favList.addEventListener('click', e => {
+      if (e.target.tagName === 'BUTTON') {
+        const id = e.target.dataset.id;
+        let favs = JSON.parse(localStorage.getItem('favorites')||'[]');
+        favs = favs.filter(b=>b.id!==id);
+        localStorage.setItem('favorites', JSON.stringify(favs));
+        loadFavorites();
       }
-      return costs[s2.length];
-    }
+    });
 
-    let timeout;
-    bookInput.addEventListener("input", async () => {
-      clearTimeout(timeout);
-      const query = bookInput.value.trim();
-      bookInput.parentElement.classList.toggle("has-text", query.length > 0);
-      if (query.length < 2) {
-        suggestionsBox.innerHTML = "";
-        return;
-      }
-      suggestionsBox.innerHTML = '<div class="spinner"></div>';
+    // -- Autocomplete with keyboard navigation --
+    const bookInput = document.getElementById('bookInput');
+    const suggestions = document.getElementById('suggestions');
+    let currentIndex = -1, suggestionItems = [];
+
+    async function fetchSuggestions() {
+      const q = bookInput.value.trim();
+      if (q.length<3) { suggestions.style.display='none'; return; }
       try {
-        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`);
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=30`);
         const data = await res.json();
-
-        if (!data.items) {
-          suggestionsBox.innerHTML = "";
-          return;
-        }
-
-        const lowerQuery = query.toLowerCase();
+        if (!data.items) throw '';
         const seen = new Set();
-
-        let candidates = data.items
-          .map(item => {
-            const info = item.volumeInfo;
-            if (!info.title || !info.authors || info.authors.length === 0) return null;
-
-            const authors = info.authors.join(", ");
-            if (authors.toLowerCase() === "unknown") return null;
-
-            const fullText = `${info.title} by ${authors}`;
-            const key = fullText.toLowerCase();
-
-            if (seen.has(key)) return null;
-            seen.add(key);
-
-            const sim = similarity(lowerQuery, key.toLowerCase());
-            return { fullText, title: info.title, authors, sim };
-          })
-          .filter(x => x !== null);
-
-        candidates.sort((a, b) => b.sim - a.sim);
-        const top = candidates.slice(0, 10);
-
-        suggestionsBox.innerHTML = "";
-
-        for (const c of top) {
-          const div = document.createElement("div");
-          div.className = "autocomplete-suggestion";
-          div.innerHTML = `<span class="bold-title">${c.title}</span> by ${c.authors}`;
-          div.addEventListener("click", () => {
-            bookInput.value = c.fullText;
-            bookInput.dispatchEvent(new Event('input'));
-            suggestionsBox.innerHTML = "";
+        const list = data.items
+          .map(i=> { const info=i.volumeInfo; if(!info.title||!info.authors) return null;
+            const txt=`${info.title} by ${info.authors.join(', ')}`; 
+            if(seen.has(txt)) return null; seen.add(txt);
+            return txt; })
+          .filter(Boolean).slice(0,10);
+        suggestions.innerHTML = '';
+        list.forEach((txt,i) => {
+          const div = document.createElement('div');
+          div.className='suggestion';
+          div.textContent = txt;
+          div.setAttribute('role','option');
+          div.addEventListener('click', ()=> {
+            bookInput.value=txt; suggestions.style.display='none';
           });
-          suggestionsBox.appendChild(div);
+          suggestions.appendChild(div);
+        });
+        suggestionItems = [...suggestions.children];
+        currentIndex = -1;
+        suggestions.style.display = 'block';
+      } catch {
+        suggestions.style.display='none';
+      }
+    }
+    const debouncedFetch = debounce(fetchSuggestions, 300);
+    bookInput.addEventListener('input', debouncedFetch);
+    bookInput.addEventListener('keydown', e => {
+      if (!suggestionItems.length) return;
+      if (e.key==='ArrowDown') {
+        e.preventDefault();
+        currentIndex = Math.min(currentIndex+1, suggestionItems.length-1);
+        updateActive();
+      } else if (e.key==='ArrowUp') {
+        e.preventDefault();
+        currentIndex = Math.max(currentIndex-1, 0);
+        updateActive();
+      } else if (e.key==='Enter') {
+        if (currentIndex>=0) {
+          bookInput.value = suggestionItems[currentIndex].textContent;
+          suggestions.style.display='none';
+          e.preventDefault();
         }
-      } catch (e) {
-        suggestionsBox.innerHTML = '<div class="autocomplete-suggestion">Failed to load suggestions. Please try again.</div>';
-        console.error(e);
       }
     });
-
-    document.addEventListener("click", e => {
-      if (!e.target.closest(".autocomplete-container")) {
-        suggestionsBox.innerHTML = "";
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.autocomplete-container')) {
+        suggestions.style.display='none';
       }
     });
-
-    function hasAuthorOverlap(authors1, authors2) {
-      if (!authors1.length || !authors2.length) return false;
-      for (const a1 of authors1) {
-        for (const a2 of authors2) {
-          if (a1.toLowerCase() === a2.toLowerCase()) return true;
-        }
-      }
-      return false;
+    function updateActive() {
+      suggestionItems.forEach((el,i)=> el.classList.toggle('active', i===currentIndex));
     }
 
+    // -- Recommendations & main logic --
+    document.getElementById('searchBtn').addEventListener('click', getRecommendations);
     async function getRecommendations() {
-      const query = document.getElementById("bookInput").value.trim();
-      const resultsDiv = document.getElementById("results");
-
-      if (!query) {
-        resultsDiv.innerHTML = "<p>Please enter a book title.</p>";
-        return;
-      }
-
-      resultsDiv.innerHTML = '<div class="spinner"></div><p>🔍 Searching for recommendations...</p>';
+      const query = bookInput.value.trim();
+      const resultsDiv = document.getElementById('results');
+      suggestions.style.display='none';
+      resultsDiv.innerHTML = '';
+      if (!query) return resultsDiv.innerHTML = '<p>Please enter a book title.</p>';
+      saveRecent(query);
+      showSpinner(true);
 
       try {
         const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=40`);
         const data = await res.json();
+        showSpinner(false);
+        if (!data.items) return resultsDiv.innerHTML = '<p>No results found.</p>';
 
-        resultsDiv.innerHTML = "";
-
-        if (!data.items) {
-          resultsDiv.innerHTML = "<p>No results found. Try another book.</p>";
-          return;
-        }
-
-        let bookFound = false;
-        let userCategories = [];
-        let userAuthors = [];
-        const lowerQuery = query.toLowerCase();
-
-        // Find the user's book
-        for (const item of data.items) {
-          const info = item.volumeInfo;
-          if (!info.title) continue;
-          const titleLower = info.title.toLowerCase();
-          const authorsList = info.authors || [];
-          const fullAuthorsStr = authorsList.join(", ").toLowerCase();
-          if (titleLower.includes(lowerQuery) || lowerQuery.includes(titleLower) || fullAuthorsStr.includes(lowerQuery)) {
-            userAuthors = authorsList.map(a => a.toLowerCase());
-            userCategories = info.categories || [];
-            bookFound = true;
+        // Find user’s book to extract categories/authors
+        let userCats=[], userAuth=[];
+        for (const i of data.items) {
+          const info=i.volumeInfo;
+          if (info.title.toLowerCase().includes(query.toLowerCase())) {
+            userCats=info.categories||[]; userAuth=info.authors||[];
             break;
           }
         }
+        const recs = data.items.filter(i=>{
+          const info=i.volumeInfo;
+          if (!info.title||!info.description||!info.imageLinks) return false;
+          if ((info.authors||[]).some(a=> userAuth.includes(a))) return false;
+          return true;
+        }).map(i=>{
+          const info=i.volumeInfo;
+          let score=0;
+          if (userCats.length && info.categories?.some(c=>userCats.includes(c))) score++;
+          if (info.averageRating>=3.5) score++;
+          return { item:i, score };
+        }).sort((a,b)=>b.score - a.score)
+          .slice(0,10)
+          .map(({item})=> item);
 
-        if (!bookFound) {
-          resultsDiv.innerHTML = "<p>Book not found. Please try a different title.</p>";
-          return;
-        }
+        if (!recs.length) return resultsDiv.innerHTML = '<p>No recommendations found.</p>';
 
-        const potentialRecs = [];
-        const currentYear = new Date().getFullYear();
-        for (const book of data.items) {
+        for (const book of recs) {
           const info = book.volumeInfo;
-          if (!info.title || !info.imageLinks?.thumbnail || !info.description) continue;
-          const titleLower = info.title.toLowerCase();
-          const authorsList = info.authors || ["unknown"];
-          const authorsLower = authorsList.map(a => a.toLowerCase());
-
-          // Skip the user's book
-          if (titleLower.includes(lowerQuery) || lowerQuery.includes(titleLower)) continue;
-
-          // Skip books by the same authors as the user's book
-          if (hasAuthorOverlap(authorsLower, userAuthors)) continue;
-
-          let score = 0;
-          // Add score for genre overlap
-          if (userCategories.length > 0 && info.categories && info.categories.length > 0) {
-            if (userCategories.some(cat => info.categories.includes(cat))) {
-              score += 1;
-            }
-          }
-          // Add score for high rating
-          if (info.averageRating && typeof info.averageRating === 'number' && info.averageRating >= 3.5) {
-            score += 1;
-          }
-          // Add score for recent publication
-          if (info.publishedDate && parseInt(info.publishedDate) >= currentYear - 20) {
-            score += 0.5;
-          }
-          potentialRecs.push({ book, score });
-        }
-
-        // Sort by score (descending), then by title (alphabetically)
-        potentialRecs.sort((a, b) => {
-          if (b.score !== a.score) {
-            return b.score - a.score;
-          }
-          return a.book.volumeInfo.title.localeCompare(b.book.volumeInfo.title);
-        });
-
-        const recommendations = [];
-        const seenAuthors = new Set();
-        for (const { book } of potentialRecs) {
-          const info = book.volumeInfo;
-          const authorsLower = (info.authors || ["unknown"]).map(a => a.toLowerCase());
-          // Skip if any author has already been recommended
-          if (authorsLower.some(a => seenAuthors.has(a))) continue;
-          recommendations.push(book);
-          authorsLower.forEach(a => seenAuthors.add(a));
-          if (recommendations.length >= 10) break;
-        }
-
-        resultsDiv.innerHTML = "";
-        for (const book of recommendations) {
-          const info = book.volumeInfo;
-          const div = document.createElement("div");
-          div.className = "book";
-          const description = info.description || "No description available.";
-          const shortened = description.length > 500 ? description.slice(0, 500) + "..." : description;
+          const id = book.id;
+          const div = document.createElement('div');
+          div.className='book';
           div.innerHTML = `
-            <img src="${info.imageLinks.thumbnail}" alt="Book cover">
+            <img src="${info.imageLinks.thumbnail.replace(/&edge=curl/g,'')}" alt="Cover of ${info.title}">
             <div class="book-info">
-              <strong>${info.title || "No title"}</strong> by ${info.authors?.join(", ") || "Unknown"}
-              <p>${shortened}</p>
-              <a href="${info.infoLink}" target="_blank" rel="noopener noreferrer">More Info</a>
-            </div>
-          `;
+              <strong>${info.title}</strong><br>
+              <em>by ${info.authors?.join(', ')}</em>
+              <p>${(info.description||'').slice(0,200)}${info.description?.length>200?'...':''}</p>
+              <div class="book-actions">
+                <a href="${info.infoLink}" target="_blank" rel="noopener">More Info</a>
+                <a href="https://www.amazon.com/s?k=${encodeURIComponent(info.title+' '+(info.authors||[]).join(' '))}" target="_blank" class="accent-btn">Amazon</a>
+                <button aria-label="Save to favorites" data-id="${id}">⭐</button>
+              </div>
+            </div>`;
           resultsDiv.appendChild(div);
         }
 
-        if (recommendations.length === 0) {
-          resultsDiv.innerHTML = "<p>No suitable recommendations found. Try another search.</p>";
-        }
+        // Favorite button handlers
+        document.querySelectorAll('.book-actions button').forEach(btn=>{
+          btn.addEventListener('click', ()=>{
+            const bid = btn.dataset.id;
+            const bk = recs.find(b=>b.id===bid);
+            if (!bk) return;
+            let favs = JSON.parse(localStorage.getItem('favorites')||'[]');
+            if (favs.some(f=>f.id===bid)) return; // no dupes
+            favs.push({ id: bid, title: bk.volumeInfo.title, authors: bk.volumeInfo.authors });
+            localStorage.setItem('favorites', JSON.stringify(favs));
+            btn.textContent = '✅';
+          });
+        });
 
-      } catch (error) {
-        resultsDiv.innerHTML = "<p>❌ Unable to fetch recommendations. Check your connection and try again.</p>";
-        console.error(error);
+      } catch (err) {
+        showSpinner(false);
+        console.error(err);
+        document.getElementById('results').innerHTML = '<p>❌ Error fetching data. Try again later.</p>';
       }
     }
   </script>
