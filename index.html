@@ -132,6 +132,7 @@
     let isRecommendationsActive = false; // Flag to track if recommendations are being fetched
     let selectedIndex = -1; // Track which suggestion is selected
     let suggestions = []; // Store current suggestions
+    let currentSearchController = null; // Track current search request
 
     function similarity(s1, s2) {
       const longer = s1.length > s2.length ? s1 : s2;
@@ -226,6 +227,11 @@
       const query = bookInput.value.trim();
       selectedIndex = -1; // Reset selection when typing
       
+      // Cancel any ongoing search
+      if (currentSearchController) {
+        currentSearchController.abort();
+      }
+      
       if (query.length < 3) {
         suggestionsBox.innerHTML = "";
         suggestionsBox.style.display = "none";
@@ -233,9 +239,26 @@
         return;
       }
 
+      // Create new AbortController for this search
+      currentSearchController = new AbortController();
+      const searchSignal = currentSearchController.signal;
+
       try {
-        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`);
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`, {
+          signal: searchSignal
+        });
+        
+        // Check if this request was cancelled
+        if (searchSignal.aborted) {
+          return;
+        }
+        
         const data = await res.json();
+
+        // Double-check that the query still matches what's in the input
+        if (query !== bookInput.value.trim()) {
+          return;
+        }
 
         if (!data.items) {
           suggestionsBox.innerHTML = "";
@@ -264,6 +287,11 @@
         candidates.sort((a, b) => b.sim - a.sim);
         const top = candidates.slice(0, 10);
         
+        // Final check before updating UI
+        if (query !== bookInput.value.trim() || searchSignal.aborted) {
+          return;
+        }
+        
         suggestions = top; // Store suggestions
         suggestionsBox.innerHTML = "";
 
@@ -284,10 +312,13 @@
           suggestionsBox.style.display = "none";
         }
       } catch (e) {
-        suggestionsBox.innerHTML = "";
-        suggestionsBox.style.display = "none";
-        suggestions = [];
-        console.error(e);
+        // Don't show error if request was just cancelled
+        if (e.name !== 'AbortError') {
+          suggestionsBox.innerHTML = "";
+          suggestionsBox.style.display = "none";
+          suggestions = [];
+          console.error(e);
+        }
       }
     });
 
