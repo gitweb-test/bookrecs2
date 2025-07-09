@@ -132,70 +132,21 @@
     let isRecommendationsActive = false; // Flag to track if recommendations are being fetched
     let selectedIndex = -1; // Track which suggestion is selected
     let suggestions = []; // Store current suggestions
-    let currentSearchController = null; // Track current search request
+    let debounceTimer = null; // Debounce timer
+    let currentQuery = ''; // Track current query to avoid duplicate requests
 
-    function similarity(s1, s2) {
-      const longer = s1.length > s2.length ? s1 : s2;
-      const shorter = s1.length > s2.length ? s2 : s1;
-      const longerLength = longer.length;
-      if (longerLength === 0) return 1.0;
-      return (longerLength - editDistance(longer, shorter)) / longerLength;
-    }
-
-    function editDistance(s1, s2) {
-      s1 = s1.toLowerCase();
-      s2 = s2.toLowerCase();
-
-      const costs = [];
-      for (let i = 0; i <= s1.length; i++) {
-        let lastValue = i;
-        for (let j = 0; j <= s2.length; j++) {
-          if (i === 0) costs[j] = j;
-          else {
-            if (j > 0) {
-              let newValue = costs[j - 1];
-              if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
-                newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-              }
-              costs[j - 1] = lastValue;
-              lastValue = newValue;
-            }
-          }
-        }
-        if (i > 0) costs[s2.length] = lastValue;
-      }
-      return costs[s2.length];
-    }
-
-    function calculateWeightedSimilarity(query, title, authors) {
+    function quickMatch(query, title, authors) {
       const lowerQuery = query.toLowerCase();
       const lowerTitle = title.toLowerCase();
       const lowerAuthors = authors.toLowerCase();
-      const fullText = `${title} by ${authors}`.toLowerCase();
       
-      // Check if query appears to be looking for a title (starts with title)
-      const titleStartsWithQuery = lowerTitle.startsWith(lowerQuery);
-      const authorStartsWithQuery = lowerAuthors.startsWith(lowerQuery);
+      // Fast string matching - prioritize starts-with matches
+      const titleScore = lowerTitle.startsWith(lowerQuery) ? 100 : 
+                        lowerTitle.includes(lowerQuery) ? 50 : 0;
+      const authorScore = lowerAuthors.startsWith(lowerQuery) ? 80 : 
+                         lowerAuthors.includes(lowerQuery) ? 30 : 0;
       
-      // Calculate similarity scores
-      const titleSim = similarity(lowerQuery, lowerTitle);
-      const authorSim = similarity(lowerQuery, lowerAuthors);
-      const fullSim = similarity(lowerQuery, fullText);
-      
-      // If title starts with query, heavily prioritize it
-      if (titleStartsWithQuery && !authorStartsWithQuery) {
-        return (titleSim * 0.9) + (authorSim * 0.05) + (fullSim * 0.05);
-      }
-      
-      // For shorter queries (< 6 chars), prioritize title matches even more
-      if (lowerQuery.length < 6) {
-        return (titleSim * 0.85) + (authorSim * 0.1) + (fullSim * 0.05);
-      }
-      
-      // Default weighting (title still prioritized but less extreme)
-      const weightedScore = (titleSim * 0.7) + (authorSim * 0.2) + (fullSim * 0.1);
-      
-      return weightedScore;
+      return Math.max(titleScore, authorScore);
     }
 
     function updateSelection() {
@@ -223,42 +174,25 @@
       }
     }
 
-    bookInput.addEventListener("input", async () => {
-      const query = bookInput.value.trim();
-      selectedIndex = -1; // Reset selection when typing
+    async function fetchSuggestions(query) {
+      // Avoid duplicate requests
+      if (query === currentQuery) return;
+      currentQuery = query;
       
-      // Cancel any ongoing search
-      if (currentSearchController) {
-        currentSearchController.abort();
-      }
-      
-      if (query.length < 3) {
+      if (query.length < 2) {
         suggestionsBox.innerHTML = "";
         suggestionsBox.style.display = "none";
         suggestions = [];
         return;
       }
 
-      // Create new AbortController for this search
-      currentSearchController = new AbortController();
-      const searchSignal = currentSearchController.signal;
-
       try {
-        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`, {
-          signal: searchSignal
-        });
-        
-        // Check if this request was cancelled
-        if (searchSignal.aborted) {
-          return;
-        }
-        
+        // Reduced maxResults for faster response
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=15`);
         const data = await res.json();
 
-        // Double-check that the query still matches what's in the input
-        if (query !== bookInput.value.trim()) {
-          return;
-        }
+        // Check if this is still the current query
+        if (query !== currentQuery) return;
 
         if (!data.items) {
           suggestionsBox.innerHTML = "";
@@ -268,31 +202,33 @@
         }
 
         const seen = new Set();
+        let candidates = [];
 
-        let candidates = data.items
-          .map(item => {
-            const info = item.volumeInfo;
-            if (!info.title || !info.authors || info.authors.length === 0) return null;
-            const authors = info.authors.join(", ");
-            if (authors.toLowerCase() === "unknown") return null;
-            const fullText = `${info.title} by ${authors}`;
-            const key = fullText.toLowerCase();
-            if (seen.has(key)) return null;
-            seen.add(key);
-            const sim = calculateWeightedSimilarity(query, info.title, authors);
-            return { fullText, title: info.title, authors, sim };
-          })
-          .filter(x => x !== null);
+        // Process results more efficiently
+        for (const item of data.items) {
+          const info = item.volumeInfo;
+          if (!info.title || !info.authors || info.authors.length === 0) continue;
+          
+          const authors = info.authors.join(", ");
+          if (authors.toLowerCase() === "unknown") continue;
+          
+          const fullText = `${info.title} by ${authors}`;
+          const key = fullText.toLowerCase();
+          
+          if (seen.has(key)) continue;
+          seen.add(key);
+          
+          const score = quickMatch(query, info.title, authors);
+          if (score > 0) {
+            candidates.push({ fullText, title: info.title, authors, score });
+          }
+        }
 
-        candidates.sort((a, b) => b.sim - a.sim);
+        // Sort by score and take top 10
+        candidates.sort((a, b) => b.score - a.score);
         const top = candidates.slice(0, 10);
         
-        // Final check before updating UI
-        if (query !== bookInput.value.trim() || searchSignal.aborted) {
-          return;
-        }
-        
-        suggestions = top; // Store suggestions
+        suggestions = top;
         suggestionsBox.innerHTML = "";
 
         for (let i = 0; i < top.length; i++) {
@@ -312,14 +248,26 @@
           suggestionsBox.style.display = "none";
         }
       } catch (e) {
-        // Don't show error if request was just cancelled
-        if (e.name !== 'AbortError') {
-          suggestionsBox.innerHTML = "";
-          suggestionsBox.style.display = "none";
-          suggestions = [];
-          console.error(e);
-        }
+        suggestionsBox.innerHTML = "";
+        suggestionsBox.style.display = "none";
+        suggestions = [];
+        console.error(e);
       }
+    }
+
+    bookInput.addEventListener("input", () => {
+      const query = bookInput.value.trim();
+      selectedIndex = -1; // Reset selection when typing
+      
+      // Clear previous timer
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      
+      // Set new timer with short delay
+      debounceTimer = setTimeout(() => {
+        fetchSuggestions(query);
+      }, 100); // Reduced debounce time
     });
 
     bookInput.addEventListener('keydown', function(event) {
