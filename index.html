@@ -116,7 +116,7 @@
 </head>
 <body>
   <h1>📚 Book Recommender</h1>
-  <p>Enter a book you like, and we'll recommend 10 similar ones using Google Books.</p>
+  <p>Enter a book you like and we'll recommend 10 more to check out!</p>
 
   <div class="autocomplete-container">
     <input id="bookInput" type="text" placeholder="e.g. Slaughterhouse-Five by Kurt Vonnegut" autocomplete="off" />
@@ -353,6 +353,7 @@
         let bookFound = false;
         let userCategories = [];
         let userAuthors = [];
+        let userTitle = "";
         const lowerQuery = query.toLowerCase();
 
         for (const item of data.items) {
@@ -364,6 +365,7 @@
           if (titleLower.includes(lowerQuery) || lowerQuery.includes(titleLower) || fullAuthorsStr.includes(lowerQuery)) {
             userAuthors = authorsList.map(a => a.toLowerCase());
             userCategories = info.categories || [];
+            userTitle = info.title.toLowerCase();
             bookFound = true;
             break;
           }
@@ -382,7 +384,12 @@
           const authorsList = info.authors;
           const authorsLower = authorsList.map(a => a.toLowerCase());
 
-          if (titleLower.includes(lowerQuery) || lowerQuery.includes(titleLower)) continue;
+          // Skip if it's the same title, contains parts of the title, or by the same author
+          if (titleLower === userTitle || 
+              titleLower.includes(lowerQuery) || 
+              lowerQuery.includes(titleLower) ||
+              titleLower.includes(userTitle) ||
+              userTitle.includes(titleLower)) continue;
           if (hasAuthorOverlap(authorsLower, userAuthors)) continue;
 
           let score = 0;
@@ -406,12 +413,18 @@
 
         const recommendations = [];
         const seenAuthors = new Set();
+        const seenTitles = new Set();
         for (const { book } of potentialRecs) {
           const info = book.volumeInfo;
           const authorsLower = info.authors.map(a => a.toLowerCase());
-          if (authorsLower.some(a => seenAuthors.has(a))) continue;
+          const titleLower = info.title.toLowerCase();
+          
+          // Skip if we've already seen this author or title
+          if (authorsLower.some(a => seenAuthors.has(a)) || seenTitles.has(titleLower)) continue;
+          
           recommendations.push(book);
           authorsLower.forEach(a => seenAuthors.add(a));
+          seenTitles.add(titleLower);
           if (recommendations.length >= 10) break;
         }
 
