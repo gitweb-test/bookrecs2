@@ -55,7 +55,8 @@
       border-bottom: 1px solid #eee;
     }
 
-    .autocomplete-suggestion:hover {
+    .autocomplete-suggestion:hover,
+    .autocomplete-suggestion.active {
       background-color: #f0f0f0;
     }
 
@@ -65,39 +66,6 @@
 
     .autocomplete-container {
       position: relative;
-    }
-
-    .input-wrapper {
-      position: relative;
-    }
-
-    .input-wrapper input {
-      padding-right: 35px;
-      margin-top: 10px;
-    }
-
-    .clear-button {
-      position: absolute;
-      right: 10px;
-      top: 50%;
-      transform: translateY(-50%);
-      background: none;
-      border: none;
-      font-size: 18px;
-      cursor: pointer;
-      color: #666;
-      padding: 0;
-      width: 20px;
-      height: 20px;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      border-radius: 50%;
-    }
-
-    .clear-button:hover {
-      background-color: #f0f0f0;
-      color: #333;
     }
 
     .book {
@@ -147,10 +115,7 @@
   <p>Enter a book you like, and we'll recommend 10 similar ones using Google Books.</p>
 
   <div class="autocomplete-container">
-    <div class="input-wrapper">
-      <input id="bookInput" type="text" placeholder="e.g. Slaughterhouse-Five by Kurt Vonnegut" autocomplete="off" />
-      <button id="clearButton" class="clear-button" type="button">×</button>
-    </div>
+    <input id="bookInput" type="text" placeholder="e.g. Slaughterhouse-Five by Kurt Vonnegut" autocomplete="off" />
     <div id="autocomplete-list" class="autocomplete-suggestions"></div>
   </div>
 
@@ -159,32 +124,8 @@
 
   <script>
     const bookInput = document.getElementById("bookInput");
-    const clearButton = document.getElementById("clearButton");
     const suggestionsBox = document.getElementById("autocomplete-list");
     let isRecommendationsActive = false; // Flag to track if recommendations are being fetched
-
-    // Show/hide clear button based on input content
-    function updateClearButton() {
-      if (bookInput.value.trim()) {
-        clearButton.style.display = "flex";
-      } else {
-        clearButton.style.display = "none";
-      }
-    }
-
-    // Clear button functionality
-    clearButton.addEventListener("click", () => {
-      bookInput.value = "";
-      suggestionsBox.innerHTML = "";
-      suggestionsBox.style.display = "none";
-      updateClearButton();
-      bookInput.focus();
-    });
-
-    // Update clear button visibility on input
-    bookInput.addEventListener("input", () => {
-      updateClearButton();
-    });
 
     function similarity(s1, s2) {
       const longer = s1.length > s2.length ? s1 : s2;
@@ -284,7 +225,6 @@
             bookInput.value = c.fullText;
             suggestionsBox.innerHTML = "";
             suggestionsBox.style.display = "none"; // Hide after selection
-            updateClearButton();
           });
           suggestionsBox.appendChild(div);
         }
@@ -462,9 +402,6 @@
         isRecommendationsActive = false;
       }
     }
-
-    // Initialize clear button visibility on page load
-    updateClearButton();
   </script>
 </body>
 </html>
