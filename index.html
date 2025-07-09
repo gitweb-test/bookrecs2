@@ -124,6 +124,7 @@
   <script>
     const bookInput = document.getElementById("bookInput");
     const suggestionsBox = document.getElementById("autocomplete-list");
+    let isRecommendationsActive = false; // Flag to track if recommendations are being fetched
 
     function similarity(s1, s2) {
       const longer = s1.length > s2.length ? s1 : s2;
@@ -211,7 +212,11 @@
           suggestionsBox.appendChild(div);
         }
 
-        suggestionsBox.style.display = "block"; // Show when suggestions are populated
+        if (top.length > 0 && !isRecommendationsActive) {
+          suggestionsBox.style.display = "block"; // Show only if recommendations are not active
+        } else {
+          suggestionsBox.style.display = "none";
+        }
       } catch (e) {
         suggestionsBox.innerHTML = "";
         suggestionsBox.style.display = "none"; // Hide on error
@@ -219,7 +224,6 @@
       }
     });
 
-    // Add event listener for Enter key press
     bookInput.addEventListener('keydown', function(event) {
       if (event.key === "Enter") {
         event.preventDefault();
@@ -244,37 +248,153 @@
       return false;
     }
 
-    function jaccardSimilarity(text1, text2) {
-      const tokenize = text => {
-        return new Set(
-          text
-            .toLowerCase()
-            .split(/\W+/)
-            .filter(w => w.length > 3)
-        );
-      };
-      const set1 = tokenize(text1);
-      const set2 = tokenize(text2);
-      const intersection = new Set([...set1].filter(w => set2.has(w)));
+    // Improved recommendation algorithm functions
+    function extractKeywords(text) {
+      if (!text) return [];
+      const stopWords = new Set(['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an', 'is', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'must', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his', 'her', 'its', 'our', 'their']);
+      
+      return text.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 2 && !stopWords.has(word))
+        .slice(0, 20); // Limit to top 20 keywords
+    }
+
+    function calculateTextSimilarity(text1, text2) {
+      const keywords1 = extractKeywords(text1);
+      const keywords2 = extractKeywords(text2);
+      
+      if (keywords1.length === 0 || keywords2.length === 0) return 0;
+      
+      const set1 = new Set(keywords1);
+      const set2 = new Set(keywords2);
+      const intersection = new Set([...set1].filter(x => set2.has(x)));
       const union = new Set([...set1, ...set2]);
-      return union.size ? intersection.size / union.size : 0;
+      
+      return intersection.size / union.size; // Jaccard similarity
+    }
+
+    function categorySimilarity(cats1, cats2) {
+      if (!cats1 || !cats2 || cats1.length === 0 || cats2.length === 0) return 0;
+      
+      const set1 = new Set(cats1.map(cat => cat.toLowerCase()));
+      const set2 = new Set(cats2.map(cat => cat.toLowerCase()));
+      const intersection = new Set([...set1].filter(x => set2.has(x)));
+      const union = new Set([...set1, ...set2]);
+      
+      return intersection.size / union.size;
+    }
+
+    function getPublicationYearSimilarity(year1, year2) {
+      if (!year1 || !year2) return 0;
+      const diff = Math.abs(year1 - year2);
+      if (diff <= 5) return 1.0;
+      if (diff <= 10) return 0.8;
+      if (diff <= 20) return 0.6;
+      if (diff <= 30) return 0.4;
+      return 0.2;
+    }
+
+    function getRatingScore(rating, ratingsCount) {
+      if (!rating) return 0;
+      
+      // Base score from rating
+      let score = (rating - 3) / 2; // Normalize 3-5 scale to 0-1
+      
+      // Boost for higher ratings count (more reliable)
+      if (ratingsCount) {
+        if (ratingsCount > 1000) score += 0.2;
+        else if (ratingsCount > 500) score += 0.15;
+        else if (ratingsCount > 100) score += 0.1;
+        else if (ratingsCount > 50) score += 0.05;
+      }
+      
+      return Math.max(0, Math.min(1, score));
+    }
+
+    function getPageCountSimilarity(pages1, pages2) {
+      if (!pages1 || !pages2) return 0;
+      
+      const ratio = Math.min(pages1, pages2) / Math.max(pages1, pages2);
+      return ratio;
+    }
+
+    function calculateRecommendationScore(userBook, candidateBook) {
+      let score = 0;
+      let weights = {
+        category: 0.25,
+        description: 0.3,
+        title: 0.15,
+        rating: 0.15,
+        publicationYear: 0.1,
+        pageCount: 0.05
+      };
+
+      // Category similarity
+      const catSim = categorySimilarity(userBook.categories, candidateBook.categories);
+      score += catSim * weights.category;
+
+      // Description similarity
+      const descSim = calculateTextSimilarity(userBook.description, candidateBook.description);
+      score += descSim * weights.description;
+
+      // Title similarity (for thematic connections)
+      const titleSim = calculateTextSimilarity(userBook.title, candidateBook.title);
+      score += titleSim * weights.title;
+
+      // Rating quality
+      const ratingScore = getRatingScore(candidateBook.averageRating, candidateBook.ratingsCount);
+      score += ratingScore * weights.rating;
+
+      // Publication year similarity
+      if (userBook.publishedDate && candidateBook.publishedDate) {
+        const userYear = parseInt(userBook.publishedDate.substring(0, 4));
+        const candYear = parseInt(candidateBook.publishedDate.substring(0, 4));
+        const yearSim = getPublicationYearSimilarity(userYear, candYear);
+        score += yearSim * weights.publicationYear;
+      }
+
+      // Page count similarity
+      if (userBook.pageCount && candidateBook.pageCount) {
+        const pageSim = getPageCountSimilarity(userBook.pageCount, candidateBook.pageCount);
+        score += pageSim * weights.pageCount;
+      }
+
+      // Bonus for exact category matches
+      if (userBook.categories && candidateBook.categories) {
+        const exactMatches = userBook.categories.filter(cat => 
+          candidateBook.categories.some(cCat => cCat.toLowerCase() === cat.toLowerCase())
+        );
+        if (exactMatches.length > 0) {
+          score += 0.1 * Math.min(exactMatches.length / userBook.categories.length, 0.5);
+        }
+      }
+
+      // Bonus for popular books (but not too much to avoid mainstream bias)
+      if (candidateBook.ratingsCount && candidateBook.ratingsCount > 500) {
+        score += 0.05;
+      }
+
+      return Math.max(0, Math.min(1, score));
     }
 
     async function getRecommendations() {
-      const query = document.getElementById("bookInput").value.trim();
-      const resultsDiv = document.getElementById("results");
-
-      suggestionsBox.innerHTML = "";
-      suggestionsBox.style.display = "none"; // Hide suggestions box
-
-      if (!query) {
-        resultsDiv.innerHTML = "<p>Please enter a book title.</p>";
-        return;
-      }
-
-      resultsDiv.innerHTML = "<p>🔍 Searching for recommendations...</p>";
-
+      if (isRecommendationsActive) return;
+      isRecommendationsActive = true;
       try {
+        const query = document.getElementById("bookInput").value.trim();
+        const resultsDiv = document.getElementById("results");
+
+        suggestionsBox.innerHTML = "";
+        suggestionsBox.style.display = "none"; // Hide suggestions box
+
+        if (!query) {
+          resultsDiv.innerHTML = "<p>Please enter a book title.</p>";
+          return;
+        }
+
+        resultsDiv.innerHTML = "<p>🔍 Searching for recommendations...</p>";
+
         const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=40`);
         const data = await res.json();
 
@@ -285,83 +405,170 @@
           return;
         }
 
-        let userInfo = null;
+        let userBook = null;
+        const lowerQuery = query.toLowerCase();
+
+        // Find the user's book with more detailed matching
         for (const item of data.items) {
           const info = item.volumeInfo;
           if (!info.title) continue;
+          
           const titleLower = info.title.toLowerCase();
-          if (titleLower.includes(query.toLowerCase())) {
-            userInfo = {
+          const authorsList = info.authors || ["unknown"];
+          const fullAuthorsStr = authorsList.join(", ").toLowerCase();
+          
+          if (titleLower.includes(lowerQuery) || lowerQuery.includes(titleLower) || fullAuthorsStr.includes(lowerQuery)) {
+            userBook = {
+              title: info.title,
+              authors: authorsList,
               categories: info.categories || [],
               description: info.description || "",
-              authors: info.authors || [],
-              publishedYear: info.publishedDate ? parseInt(info.publishedDate.slice(0,4)) : null,
+              publishedDate: info.publishedDate || "",
+              pageCount: info.pageCount || 0,
+              averageRating: info.averageRating || 0,
               ratingsCount: info.ratingsCount || 0
             };
             break;
           }
         }
 
-        if (!userInfo) {
+        if (!userBook) {
           resultsDiv.innerHTML = "<p>Book not found. Please try a different title.</p>";
           return;
         }
 
-        const candidates = data.items
-          .filter(item => {
-            const info = item.volumeInfo;
-            return info.title && info.imageLinks?.thumbnail && info.description && info.authors && info.authors.length;
-          })
-          .map(item => ({ id: item.id, info: item.volumeInfo }))
-          .filter(({ info }) => !info.title.toLowerCase().includes(query.toLowerCase()))
-          .filter(({ info }) => !hasAuthorOverlap(info.authors, userInfo.authors));
-
-        if (!candidates.length) {
-          resultsDiv.innerHTML = "<p>No suitable recommendations found. Try another search.</p>";
-          return;
+        // Get more potential recommendations from multiple searches
+        const additionalQueries = [];
+        
+        // Search by categories
+        if (userBook.categories.length > 0) {
+          additionalQueries.push(userBook.categories[0]);
+        }
+        
+        // Search by key description words
+        if (userBook.description) {
+          const keywords = extractKeywords(userBook.description);
+          if (keywords.length > 0) {
+            additionalQueries.push(keywords.slice(0, 3).join(" "));
+          }
         }
 
-        const maxRatings = Math.max(...candidates.map(c => c.info.ratingsCount || 0), userInfo.ratingsCount, 1);
-
-        const scored = candidates.map(({ info }) => {
-          let score = 0;
-          score += 2 * userInfo.categories.filter(cat => info.categories?.includes(cat)).length;
-          if (info.averageRating) score += 1.5 * (info.averageRating / 5);
-          score += (info.ratingsCount || 0) / maxRatings;
-          score += 1.5 * jaccardSimilarity(userInfo.description, info.description);
-          if (userInfo.publishedYear && info.publishedDate) {
-            const year = parseInt(info.publishedDate.slice(0,4));
-            if (!isNaN(year) && Math.abs(year - userInfo.publishedYear) <= 5) score += 1;
+        let allCandidates = [...data.items];
+        
+        // Fetch additional books for better recommendations
+        for (const additionalQuery of additionalQueries.slice(0, 2)) {
+          try {
+            const additionalRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(additionalQuery)}&maxResults=40`);
+            const additionalData = await additionalRes.json();
+            if (additionalData.items) {
+              allCandidates.push(...additionalData.items);
+            }
+          } catch (e) {
+            console.log("Additional search failed:", e);
           }
-          return { book: info, score };
-        });
+        }
 
-        scored.sort((a, b) => b.score - a.score || a.book.title.localeCompare(b.book.title));
+        // Filter and score candidates
+        const scoredCandidates = [];
+        const seen = new Set();
+        
+        for (const book of allCandidates) {
+          const info = book.volumeInfo;
+          
+          // Basic filtering
+          if (!info.title || !info.imageLinks?.thumbnail || !info.authors || info.authors.length === 0) continue;
+          
+          const titleLower = info.title.toLowerCase();
+          const bookKey = `${titleLower}-${info.authors.join(",").toLowerCase()}`;
+          
+          if (seen.has(bookKey)) continue;
+          seen.add(bookKey);
+          
+          // Skip if it's the same book
+          if (titleLower.includes(lowerQuery) || lowerQuery.includes(titleLower)) continue;
+          
+          // Skip if same author
+          const authorsLower = info.authors.map(a => a.toLowerCase());
+          if (hasAuthorOverlap(authorsLower, userBook.authors.map(a => a.toLowerCase()))) continue;
+          
+          // Calculate recommendation score
+          const candidateBook = {
+            title: info.title,
+            authors: info.authors,
+            categories: info.categories || [],
+            description: info.description || "",
+            publishedDate: info.publishedDate || "",
+            pageCount: info.pageCount || 0,
+            averageRating: info.averageRating || 0,
+            ratingsCount: info.ratingsCount || 0
+          };
+          
+          const score = calculateRecommendationScore(userBook, candidateBook);
+          
+          // Only include books with decent scores
+          if (score > 0.1) {
+            scoredCandidates.push({ book, score });
+          }
+        }
 
+        // Sort by score and diversify
+        scoredCandidates.sort((a, b) => b.score - a.score);
+
+        // Select diverse recommendations
         const recommendations = [];
-        const seenAuthors = new Set();
-        for (const { book } of scored) {
-          const authorsLower = book.authors.map(a => a.toLowerCase());
-          if (authorsLower.some(a => seenAuthors.has(a))) continue;
+        const usedAuthors = new Set();
+        const usedCategories = new Set();
+        
+        for (const { book, score } of scoredCandidates) {
+          const info = book.volumeInfo;
+          const authorsLower = info.authors.map(a => a.toLowerCase());
+          
+          // Skip if we already have this author
+          if (authorsLower.some(a => usedAuthors.has(a))) continue;
+          
+          // Prefer diversity in categories for lower-scored items
+          if (recommendations.length > 5 && info.categories) {
+            const hasNewCategory = info.categories.some(cat => !usedCategories.has(cat.toLowerCase()));
+            if (!hasNewCategory && score < 0.4) continue;
+          }
+          
           recommendations.push(book);
-          authorsLower.forEach(a => seenAuthors.add(a));
+          authorsLower.forEach(a => usedAuthors.add(a));
+          if (info.categories) {
+            info.categories.forEach(cat => usedCategories.add(cat.toLowerCase()));
+          }
+          
           if (recommendations.length >= 10) break;
         }
 
+        // Display recommendations
         resultsDiv.innerHTML = "";
-        for (const info of recommendations) {
+        for (const book of recommendations) {
+          const info = book.volumeInfo;
+          const div = document.createElement("div");
+          div.className = "book";
+          const description = info.description || "No description available.";
+          const shortened = description.length > 500 ? description.slice(0, 500) + "..." : description;
+          
           let imageUrl = info.imageLinks.thumbnail;
-          try { const url = new URL(imageUrl); url.searchParams.delete('edge'); imageUrl = url.toString(); } catch { imageUrl = imageUrl.replace(/&edge=curl/g, ''); }
-          const desc = info.description.length > 500 ? info.description.slice(0,500) + '...' : info.description;
-          const amazonQuery = encodeURIComponent(`${info.title} by ${info.authors.join(' ')}`);
+          try {
+            const url = new URL(imageUrl);
+            url.searchParams.delete('edge');
+            imageUrl = url.toString();
+          } catch (e) {
+            imageUrl = imageUrl.replace(/&edge=curl/g, '');
+          }
+
+          const title = info.title || "Unknown";
+          const authors = info.authors?.join(" ") || "Unknown";
+          const amazonQuery = encodeURIComponent(`${title} by ${authors}`);
           const amazonLink = `https://www.amazon.com/s?k=${amazonQuery}&i=stripbooks`;
-          const div = document.createElement('div');
-          div.className = 'book';
+
           div.innerHTML = `
             <img src="${imageUrl}" alt="Book cover">
             <div class="book-info">
-              <strong>${info.title}</strong> by ${info.authors.join(', ')}
-              <p>${desc}</p>
+              <strong>${info.title || "No title"}</strong> by ${info.authors?.join(", ") || "Unknown"}
+              <p>${shortened}</p>
               <a href="${info.infoLink}" target="_blank" rel="noopener noreferrer">More Info</a>
               <a href="${amazonLink}" target="_blank" rel="noopener noreferrer" class="amazon-button">Amazon</a>
             </div>
@@ -369,12 +576,15 @@
           resultsDiv.appendChild(div);
         }
 
-        if (!recommendations.length) {
+        if (recommendations.length === 0) {
           resultsDiv.innerHTML = "<p>No suitable recommendations found. Try another search.</p>";
         }
+
       } catch (error) {
         resultsDiv.innerHTML = "<p>❌ Something went wrong. Try again later.</p>";
         console.error(error);
+      } finally {
+        isRecommendationsActive = false;
       }
     }
   </script>
