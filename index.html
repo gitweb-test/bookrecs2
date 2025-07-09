@@ -26,7 +26,7 @@
     }
 
     button {
-      background-color: #4CAF50;
+      background-color: #1f66e5;
       color: white;
       border: none;
       cursor: pointer;
@@ -34,7 +34,7 @@
     }
 
     button:hover {
-      background-color: #45a049;
+      background-color: #1a5acc;
     }
 
     .autocomplete-suggestions {
@@ -65,6 +65,39 @@
 
     .autocomplete-container {
       position: relative;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-wrapper input {
+      padding-right: 35px;
+      margin-top: 0;
+    }
+
+    .clear-button {
+      position: absolute;
+      right: 10px;
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: #666;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+    }
+
+    .clear-button:hover {
+      background-color: #f0f0f0;
+      color: #333;
     }
 
     .book {
@@ -114,7 +147,10 @@
   <p>Enter a book you like, and we'll recommend 10 similar ones using Google Books.</p>
 
   <div class="autocomplete-container">
-    <input id="bookInput" type="text" placeholder="e.g. Slaughterhouse-Five by Kurt Vonnegut" autocomplete="off" />
+    <div class="input-wrapper">
+      <input id="bookInput" type="text" placeholder="e.g. Slaughterhouse-Five by Kurt Vonnegut" autocomplete="off" />
+      <button id="clearButton" class="clear-button" type="button">×</button>
+    </div>
     <div id="autocomplete-list" class="autocomplete-suggestions"></div>
   </div>
 
@@ -123,9 +159,32 @@
 
   <script>
     const bookInput = document.getElementById("bookInput");
+    const clearButton = document.getElementById("clearButton");
     const suggestionsBox = document.getElementById("autocomplete-list");
     let isRecommendationsActive = false; // Flag to track if recommendations are being fetched
-    let currentRequest = null; // For request cancellation
+
+    // Show/hide clear button based on input content
+    function updateClearButton() {
+      if (bookInput.value.trim()) {
+        clearButton.style.display = "flex";
+      } else {
+        clearButton.style.display = "none";
+      }
+    }
+
+    // Clear button functionality
+    clearButton.addEventListener("click", () => {
+      bookInput.value = "";
+      suggestionsBox.innerHTML = "";
+      suggestionsBox.style.display = "none";
+      updateClearButton();
+      bookInput.focus();
+    });
+
+    // Update clear button visibility on input
+    bookInput.addEventListener("input", () => {
+      updateClearButton();
+    });
 
     function similarity(s1, s2) {
       const longer = s1.length > s2.length ? s1 : s2;
@@ -160,99 +219,43 @@
       return costs[s2.length];
     }
 
-    function calculateAutocompleteScore(query, title, authors, averageRating, ratingsCount) {
+    function calculateWeightedSimilarity(query, title, authors) {
       const lowerQuery = query.toLowerCase();
       const lowerTitle = title.toLowerCase();
       const lowerAuthors = authors.toLowerCase();
+      const fullText = `${title} by ${authors}`.toLowerCase();
       
       // Calculate similarity scores
-      const titleSimilarity = similarity(lowerQuery, lowerTitle);
-      const authorSimilarity = similarity(lowerQuery, lowerAuthors);
-      const fullTextSimilarity = similarity(lowerQuery, `${lowerTitle} by ${lowerAuthors}`);
+      const titleSim = similarity(lowerQuery, lowerTitle);
+      const authorSim = similarity(lowerQuery, lowerAuthors);
+      const fullSim = similarity(lowerQuery, fullText);
       
-      // Check for exact prefix matches (higher weight)
-      const titlePrefixMatch = lowerTitle.startsWith(lowerQuery) ? 1 : 0;
-      const authorPrefixMatch = lowerAuthors.startsWith(lowerQuery) ? 1 : 0;
+      // Weight title matches more heavily (70% title, 20% author, 10% full text)
+      const weightedScore = (titleSim * 0.7) + (authorSim * 0.2) + (fullSim * 0.1);
       
-      // Check for word-level matches
-      const queryWords = lowerQuery.split(/\s+/);
-      const titleWords = lowerTitle.split(/\s+/);
-      const authorWords = lowerAuthors.split(/\s+/);
-      
-      let titleWordMatches = 0;
-      let authorWordMatches = 0;
-      
-      for (const queryWord of queryWords) {
-        if (queryWord.length >= 2) {
-          // Check title words
-          for (const titleWord of titleWords) {
-            if (titleWord.startsWith(queryWord) || queryWord.startsWith(titleWord)) {
-              titleWordMatches++;
-              break;
-            }
-          }
-          
-          // Check author words
-          for (const authorWord of authorWords) {
-            if (authorWord.startsWith(queryWord) || queryWord.startsWith(authorWord)) {
-              authorWordMatches++;
-              break;
-            }
-          }
-        }
-      }
-      
-      // Normalize word matches
-      const titleWordScore = queryWords.length > 0 ? titleWordMatches / queryWords.length : 0;
-      const authorWordScore = queryWords.length > 0 ? authorWordMatches / queryWords.length : 0;
-      
-      // Calculate popularity score
-      let popularityScore = 0;
-      if (averageRating && ratingsCount) {
-        // Normalize ratings (4+ stars get bonus, more ratings get bonus)
-        const ratingBonus = averageRating >= 4.0 ? 0.3 : averageRating >= 3.5 ? 0.1 : 0;
-        const countBonus = Math.min(ratingsCount / 1000, 1) * 0.2; // Up to 0.2 bonus for 1000+ ratings
-        popularityScore = ratingBonus + countBonus;
-      }
-      
-      // Weighted scoring (heavily favor title matches)
-      const titleScore = (titleSimilarity * 0.4) + (titlePrefixMatch * 0.3) + (titleWordScore * 0.3);
-      const authorScore = (authorSimilarity * 0.2) + (authorPrefixMatch * 0.1) + (authorWordScore * 0.1);
-      const fullTextScore = fullTextSimilarity * 0.1;
-      
-      const totalScore = titleScore + authorScore + fullTextScore + popularityScore;
-      
-      return {
-        totalScore,
-        titleScore,
-        authorScore,
-        popularityScore,
-        titleSimilarity,
-        authorSimilarity
-      };
+      return weightedScore;
     }
 
-    async function performAutocompleteSearch(query) {
-      // Cancel any pending request
-      if (currentRequest) {
-        currentRequest.abort();
+    bookInput.addEventListener("input", async () => {
+      const query = bookInput.value.trim();
+      if (query.length < 3) {
+        suggestionsBox.innerHTML = "";
+        suggestionsBox.style.display = "none"; // Hide when input is too short
+        return;
       }
 
-      // Create new AbortController for this request
-      const controller = new AbortController();
-      currentRequest = controller;
-
       try {
-        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`, {
-          signal: controller.signal
-        });
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`);
         const data = await res.json();
 
         if (!data.items) {
-          return [];
+          suggestionsBox.innerHTML = "";
+          suggestionsBox.style.display = "none"; // Hide if no items
+          return;
         }
 
         const seen = new Set();
+
         let candidates = data.items
           .map(item => {
             const info = item.volumeInfo;
@@ -263,93 +266,38 @@
             const key = fullText.toLowerCase();
             if (seen.has(key)) return null;
             seen.add(key);
-            
-            const scoreData = calculateAutocompleteScore(
-              query, 
-              info.title, 
-              authors, 
-              info.averageRating,
-              info.ratingsCount
-            );
-            
-            return { 
-              fullText, 
-              title: info.title, 
-              authors, 
-              score: scoreData.totalScore,
-              titleScore: scoreData.titleScore,
-              authorScore: scoreData.authorScore,
-              popularityScore: scoreData.popularityScore
-            };
+            const sim = calculateWeightedSimilarity(query, info.title, authors);
+            return { fullText, title: info.title, authors, sim };
           })
           .filter(x => x !== null);
 
-        // Sort by total score (descending), then by title alphabetically
-        candidates.sort((a, b) => {
-          if (Math.abs(b.score - a.score) > 0.001) {
-            return b.score - a.score;
-          }
-          return a.title.localeCompare(b.title);
-        });
-        
-        return candidates.slice(0, 10);
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          return null; // Request was cancelled
+        candidates.sort((a, b) => b.sim - a.sim);
+        const top = candidates.slice(0, 10);
+
+        suggestionsBox.innerHTML = "";
+
+        for (const c of top) {
+          const div = document.createElement("div");
+          div.className = "autocomplete-suggestion";
+          div.innerHTML = `<span class="bold-title">${c.title}</span> by ${c.authors}`;
+          div.addEventListener("click", () => {
+            bookInput.value = c.fullText;
+            suggestionsBox.innerHTML = "";
+            suggestionsBox.style.display = "none"; // Hide after selection
+            updateClearButton();
+          });
+          suggestionsBox.appendChild(div);
         }
-        throw error;
-      } finally {
-        if (currentRequest === controller) {
-          currentRequest = null;
-        }
-      }
-    }
 
-    function displayAutocompleteResults(results) {
-      suggestionsBox.innerHTML = "";
-
-      if (!results || results.length === 0) {
-        suggestionsBox.style.display = "none";
-        return;
-      }
-
-      for (const c of results) {
-        const div = document.createElement("div");
-        div.className = "autocomplete-suggestion";
-        div.innerHTML = `<span class="bold-title">${c.title}</span> by ${c.authors}`;
-        div.addEventListener("click", () => {
-          bookInput.value = c.fullText;
-          suggestionsBox.innerHTML = "";
+        if (top.length > 0 && !isRecommendationsActive) {
+          suggestionsBox.style.display = "block"; // Show only if recommendations are not active
+        } else {
           suggestionsBox.style.display = "none";
-        });
-        suggestionsBox.appendChild(div);
-      }
-
-      if (!isRecommendationsActive) {
-        suggestionsBox.style.display = "block";
-      }
-    }
-
-    bookInput.addEventListener("input", async () => {
-      const query = bookInput.value.trim();
-      
-      if (query.length < 3) {
-        suggestionsBox.innerHTML = "";
-        suggestionsBox.style.display = "none";
-        return;
-      }
-
-      try {
-        const results = await performAutocompleteSearch(query);
-        
-        // Only display if this is still the current query and request wasn't cancelled
-        if (bookInput.value.trim() === query && results !== null) {
-          displayAutocompleteResults(results);
         }
-      } catch (error) {
-        console.error('Autocomplete error:', error);
+      } catch (e) {
         suggestionsBox.innerHTML = "";
-        suggestionsBox.style.display = "none";
+        suggestionsBox.style.display = "none"; // Hide on error
+        console.error(e);
       }
     });
 
@@ -514,6 +462,9 @@
         isRecommendationsActive = false;
       }
     }
+
+    // Initialize clear button visibility on page load
+    updateClearButton();
   </script>
 </body>
 </html>
