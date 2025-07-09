@@ -172,12 +172,26 @@
       const lowerAuthors = authors.toLowerCase();
       const fullText = `${title} by ${authors}`.toLowerCase();
       
+      // Check if query appears to be looking for a title (starts with title)
+      const titleStartsWithQuery = lowerTitle.startsWith(lowerQuery);
+      const authorStartsWithQuery = lowerAuthors.startsWith(lowerQuery);
+      
       // Calculate similarity scores
       const titleSim = similarity(lowerQuery, lowerTitle);
       const authorSim = similarity(lowerQuery, lowerAuthors);
       const fullSim = similarity(lowerQuery, fullText);
       
-      // Weight title matches more heavily (70% title, 20% author, 10% full text)
+      // If title starts with query, heavily prioritize it
+      if (titleStartsWithQuery && !authorStartsWithQuery) {
+        return (titleSim * 0.9) + (authorSim * 0.05) + (fullSim * 0.05);
+      }
+      
+      // For shorter queries (< 6 chars), prioritize title matches even more
+      if (lowerQuery.length < 6) {
+        return (titleSim * 0.85) + (authorSim * 0.1) + (fullSim * 0.05);
+      }
+      
+      // Default weighting (title still prioritized but less extreme)
       const weightedScore = (titleSim * 0.7) + (authorSim * 0.2) + (fullSim * 0.1);
       
       return weightedScore;
