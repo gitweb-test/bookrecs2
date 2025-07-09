@@ -125,11 +125,7 @@
     const bookInput = document.getElementById("bookInput");
     const suggestionsBox = document.getElementById("autocomplete-list");
     let isRecommendationsActive = false; // Flag to track if recommendations are being fetched
-
-    // Autocomplete optimization variables
-    let searchCache = new Map();
-    let debounceTimer = null;
-    let currentRequest = null;
+    let currentRequest = null; // For request cancellation
 
     function similarity(s1, s2) {
       const longer = s1.length > s2.length ? s1 : s2;
@@ -237,12 +233,6 @@
     }
 
     async function performAutocompleteSearch(query) {
-      // Check cache first
-      const cacheKey = query.toLowerCase();
-      if (searchCache.has(cacheKey)) {
-        return searchCache.get(cacheKey);
-      }
-
       // Cancel any pending request
       if (currentRequest) {
         currentRequest.abort();
@@ -259,7 +249,6 @@
         const data = await res.json();
 
         if (!data.items) {
-          searchCache.set(cacheKey, []);
           return [];
         }
 
@@ -303,18 +292,7 @@
           return a.title.localeCompare(b.title);
         });
         
-        const top = candidates.slice(0, 10);
-        
-        // Cache the result
-        searchCache.set(cacheKey, top);
-        
-        // Clean up old cache entries if cache gets too large
-        if (searchCache.size > 100) {
-          const firstKey = searchCache.keys().next().value;
-          searchCache.delete(firstKey);
-        }
-
-        return top;
+        return candidates.slice(0, 10);
       } catch (error) {
         if (error.name === 'AbortError') {
           return null; // Request was cancelled
@@ -355,32 +333,24 @@
     bookInput.addEventListener("input", async () => {
       const query = bookInput.value.trim();
       
-      // Clear previous debounce timer
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
-      }
-      
       if (query.length < 3) {
         suggestionsBox.innerHTML = "";
         suggestionsBox.style.display = "none";
         return;
       }
 
-      // Debounce the search to avoid too many API calls
-      debounceTimer = setTimeout(async () => {
-        try {
-          const results = await performAutocompleteSearch(query);
-          
-          // Only display if this is still the current query
-          if (bookInput.value.trim() === query && results !== null) {
-            displayAutocompleteResults(results);
-          }
-        } catch (error) {
-          console.error('Autocomplete error:', error);
-          suggestionsBox.innerHTML = "";
-          suggestionsBox.style.display = "none";
+      try {
+        const results = await performAutocompleteSearch(query);
+        
+        // Only display if this is still the current query and request wasn't cancelled
+        if (bookInput.value.trim() === query && results !== null) {
+          displayAutocompleteResults(results);
         }
-      }, 200); // 200ms debounce delay
+      } catch (error) {
+        console.error('Autocomplete error:', error);
+        suggestionsBox.innerHTML = "";
+        suggestionsBox.style.display = "none";
+      }
     });
 
     bookInput.addEventListener('keydown', function(event) {
