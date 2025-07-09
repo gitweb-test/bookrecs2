@@ -126,6 +126,11 @@
     const suggestionsBox = document.getElementById("autocomplete-list");
     let isRecommendationsActive = false; // Flag to track if recommendations are being fetched
 
+    // Autocomplete optimization variables
+    let searchCache = new Map();
+    let debounceTimer = null;
+    let currentRequest = null;
+
     function similarity(s1, s2) {
       const longer = s1.length > s2.length ? s1 : s2;
       const shorter = s1.length > s2.length ? s2 : s1;
@@ -231,22 +236,31 @@
       };
     }
 
-    bookInput.addEventListener("input", async () => {
-      const query = bookInput.value.trim();
-      if (query.length < 3) {
-        suggestionsBox.innerHTML = "";
-        suggestionsBox.style.display = "none"; // Hide when input is too short
-        return;
+    async function performAutocompleteSearch(query) {
+      // Check cache first
+      const cacheKey = query.toLowerCase();
+      if (searchCache.has(cacheKey)) {
+        return searchCache.get(cacheKey);
       }
 
+      // Cancel any pending request
+      if (currentRequest) {
+        currentRequest.abort();
+      }
+
+      // Create new AbortController for this request
+      const controller = new AbortController();
+      currentRequest = controller;
+
       try {
-        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`);
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`, {
+          signal: controller.signal
+        });
         const data = await res.json();
 
         if (!data.items) {
-          suggestionsBox.innerHTML = "";
-          suggestionsBox.style.display = "none"; // Hide if no items
-          return;
+          searchCache.set(cacheKey, []);
+          return [];
         }
 
         const seen = new Set();
@@ -290,31 +304,83 @@
         });
         
         const top = candidates.slice(0, 10);
-
-        suggestionsBox.innerHTML = "";
-
-        for (const c of top) {
-          const div = document.createElement("div");
-          div.className = "autocomplete-suggestion";
-          div.innerHTML = `<span class="bold-title">${c.title}</span> by ${c.authors}`;
-          div.addEventListener("click", () => {
-            bookInput.value = c.fullText;
-            suggestionsBox.innerHTML = "";
-            suggestionsBox.style.display = "none"; // Hide after selection
-          });
-          suggestionsBox.appendChild(div);
+        
+        // Cache the result
+        searchCache.set(cacheKey, top);
+        
+        // Clean up old cache entries if cache gets too large
+        if (searchCache.size > 100) {
+          const firstKey = searchCache.keys().next().value;
+          searchCache.delete(firstKey);
         }
 
-        if (top.length > 0 && !isRecommendationsActive) {
-          suggestionsBox.style.display = "block"; // Show only if recommendations are not active
-        } else {
+        return top;
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          return null; // Request was cancelled
+        }
+        throw error;
+      } finally {
+        if (currentRequest === controller) {
+          currentRequest = null;
+        }
+      }
+    }
+
+    function displayAutocompleteResults(results) {
+      suggestionsBox.innerHTML = "";
+
+      if (!results || results.length === 0) {
+        suggestionsBox.style.display = "none";
+        return;
+      }
+
+      for (const c of results) {
+        const div = document.createElement("div");
+        div.className = "autocomplete-suggestion";
+        div.innerHTML = `<span class="bold-title">${c.title}</span> by ${c.authors}`;
+        div.addEventListener("click", () => {
+          bookInput.value = c.fullText;
+          suggestionsBox.innerHTML = "";
+          suggestionsBox.style.display = "none";
+        });
+        suggestionsBox.appendChild(div);
+      }
+
+      if (!isRecommendationsActive) {
+        suggestionsBox.style.display = "block";
+      }
+    }
+
+    bookInput.addEventListener("input", async () => {
+      const query = bookInput.value.trim();
+      
+      // Clear previous debounce timer
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      
+      if (query.length < 3) {
+        suggestionsBox.innerHTML = "";
+        suggestionsBox.style.display = "none";
+        return;
+      }
+
+      // Debounce the search to avoid too many API calls
+      debounceTimer = setTimeout(async () => {
+        try {
+          const results = await performAutocompleteSearch(query);
+          
+          // Only display if this is still the current query
+          if (bookInput.value.trim() === query && results !== null) {
+            displayAutocompleteResults(results);
+          }
+        } catch (error) {
+          console.error('Autocomplete error:', error);
+          suggestionsBox.innerHTML = "";
           suggestionsBox.style.display = "none";
         }
-      } catch (e) {
-        suggestionsBox.innerHTML = "";
-        suggestionsBox.style.display = "none"; // Hide on error
-        console.error(e);
-      }
+      }, 200); // 200ms debounce delay
     });
 
     bookInput.addEventListener('keydown', function(event) {
