@@ -134,19 +134,81 @@
     let suggestions = []; // Store current suggestions
     let debounceTimer = null; // Debounce timer
     let currentQuery = ''; // Track current query to avoid duplicate requests
+    let cache = new Map(); // Cache for API responses
+    let prefetchTimer = null; // Timer for predictive prefetching
+
+    function normalizeTitle(title) {
+      return title.toLowerCase()
+        .replace(/[^\w\s]/g, '') // Remove punctuation
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim();
+    }
 
     function quickMatch(query, title, authors) {
       const lowerQuery = query.toLowerCase();
       const lowerTitle = title.toLowerCase();
       const lowerAuthors = authors.toLowerCase();
       
-      // Fast string matching - prioritize starts-with matches
-      const titleScore = lowerTitle.startsWith(lowerQuery) ? 100 : 
-                        lowerTitle.includes(lowerQuery) ? 50 : 0;
-      const authorScore = lowerAuthors.startsWith(lowerQuery) ? 80 : 
-                         lowerAuthors.includes(lowerQuery) ? 30 : 0;
+      // Normalize for better matching
+      const normalizedQuery = lowerQuery.replace(/[^\w\s]/g, '').trim();
+      const normalizedTitle = normalizeTitle(title);
+      const normalizedAuthors = authors.toLowerCase().replace(/[^\w\s]/g, '').trim();
       
-      return Math.max(titleScore, authorScore);
+      // Multi-word support - check if all words in query appear in title
+      const queryWords = normalizedQuery.split(/\s+/).filter(w => w.length > 0);
+      const titleWords = normalizedTitle.split(/\s+/);
+      const authorWords = normalizedAuthors.split(/\s+/);
+      
+      // Check if all query words match title words at word boundaries
+      const allWordsInTitle = queryWords.every(qWord => 
+        titleWords.some(tWord => tWord.startsWith(qWord))
+      );
+      
+      const allWordsInAuthor = queryWords.every(qWord => 
+        authorWords.some(aWord => aWord.startsWith(qWord))
+      );
+      
+      // Multi-word exact match gets highest priority
+      if (allWordsInTitle && queryWords.length > 1) {
+        return 2000;
+      }
+      
+      // Single word or multi-word title starts-with
+      if (normalizedTitle.startsWith(normalizedQuery)) {
+        return 1500;
+      }
+      
+      // Word boundary matching - query words start title words
+      if (allWordsInTitle) {
+        return 1200;
+      }
+      
+      // Author multi-word match
+      if (allWordsInAuthor && queryWords.length > 1) {
+        return 800;
+      }
+      
+      // Author starts-with
+      if (normalizedAuthors.startsWith(normalizedQuery)) {
+        return 600;
+      }
+      
+      // Author word boundary match
+      if (allWordsInAuthor) {
+        return 400;
+      }
+      
+      // Title contains (fallback)
+      if (lowerTitle.includes(lowerQuery)) {
+        return 100;
+      }
+      
+      // Author contains (fallback)
+      if (lowerAuthors.includes(lowerQuery)) {
+        return 50;
+      }
+      
+      return 0;
     }
 
     function updateSelection() {
@@ -186,72 +248,125 @@
         return;
       }
 
+      // Check cache first
+      if (cache.has(query)) {
+        const cachedResults = cache.get(query);
+        processResults(query, cachedResults);
+        return;
+      }
+
       try {
         // Reduced maxResults for faster response
         const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=15`);
         const data = await res.json();
 
+        // Cache the results
+        cache.set(query, data);
+        
         // Check if this is still the current query
         if (query !== currentQuery) return;
 
-        if (!data.items) {
-          suggestionsBox.innerHTML = "";
-          suggestionsBox.style.display = "none";
-          suggestions = [];
-          return;
-        }
-
-        const seen = new Set();
-        let candidates = [];
-
-        // Process results more efficiently
-        for (const item of data.items) {
-          const info = item.volumeInfo;
-          if (!info.title || !info.authors || info.authors.length === 0) continue;
-          
-          const authors = info.authors.join(", ");
-          if (authors.toLowerCase() === "unknown") continue;
-          
-          const fullText = `${info.title} by ${authors}`;
-          const key = fullText.toLowerCase();
-          
-          if (seen.has(key)) continue;
-          seen.add(key);
-          
-          const score = quickMatch(query, info.title, authors);
-          if (score > 0) {
-            candidates.push({ fullText, title: info.title, authors, score });
-          }
-        }
-
-        // Sort by score and take top 10
-        candidates.sort((a, b) => b.score - a.score);
-        const top = candidates.slice(0, 10);
+        processResults(query, data);
         
-        suggestions = top;
-        suggestionsBox.innerHTML = "";
-
-        for (let i = 0; i < top.length; i++) {
-          const c = top[i];
-          const div = document.createElement("div");
-          div.className = "autocomplete-suggestion";
-          div.innerHTML = `<span class="bold-title">${c.title}</span> by ${c.authors}`;
-          div.addEventListener("click", () => {
-            selectSuggestion(i);
-          });
-          suggestionsBox.appendChild(div);
-        }
-
-        if (top.length > 0 && !isRecommendationsActive) {
-          suggestionsBox.style.display = "block";
-        } else {
-          suggestionsBox.style.display = "none";
-        }
       } catch (e) {
         suggestionsBox.innerHTML = "";
         suggestionsBox.style.display = "none";
         suggestions = [];
         console.error(e);
+      }
+    }
+
+    function processResults(query, data) {
+      if (!data.items) {
+        suggestionsBox.innerHTML = "";
+        suggestionsBox.style.display = "none";
+        suggestions = [];
+        return;
+      }
+
+      const seen = new Set();
+      let candidates = [];
+
+      // Process results more efficiently
+      for (const item of data.items) {
+        const info = item.volumeInfo;
+        if (!info.title || !info.authors || info.authors.length === 0) continue;
+        
+        const authors = info.authors.join(", ");
+        if (authors.toLowerCase() === "unknown") continue;
+        
+        const fullText = `${info.title} by ${authors}`;
+        
+        // Better duplicate detection using normalized titles
+        const normalizedKey = normalizeTitle(info.title) + "|" + authors.toLowerCase();
+        if (seen.has(normalizedKey)) continue;
+        seen.add(normalizedKey);
+        
+        const matchScore = quickMatch(query, info.title, authors);
+        if (matchScore > 0) {
+          // Add popularity weighting
+          let popularityBonus = 0;
+          if (info.averageRating && info.ratingsCount) {
+            // Books with good ratings and many reviews get bonus
+            if (info.averageRating >= 4.0 && info.ratingsCount >= 100) {
+              popularityBonus = 50;
+            } else if (info.averageRating >= 3.5 && info.ratingsCount >= 50) {
+              popularityBonus = 25;
+            }
+          }
+          
+          candidates.push({ 
+            fullText, 
+            title: info.title, 
+            authors, 
+            score: matchScore + popularityBonus 
+          });
+        }
+      }
+
+      // Sort by score and take top 10
+      candidates.sort((a, b) => b.score - a.score);
+      const top = candidates.slice(0, 10);
+      
+      suggestions = top;
+      suggestionsBox.innerHTML = "";
+
+      for (let i = 0; i < top.length; i++) {
+        const c = top[i];
+        const div = document.createElement("div");
+        div.className = "autocomplete-suggestion";
+        div.innerHTML = `<span class="bold-title">${c.title}</span> by ${c.authors}`;
+        div.addEventListener("click", () => {
+          selectSuggestion(i);
+        });
+        suggestionsBox.appendChild(div);
+      }
+
+      if (top.length > 0 && !isRecommendationsActive) {
+        suggestionsBox.style.display = "block";
+      } else {
+        suggestionsBox.style.display = "none";
+      }
+    }
+
+    function predictivePrefetch(query) {
+      if (query.length >= 2) {
+        // Prefetch next likely character combinations
+        const commonNextChars = ['a', 'e', 'i', 'o', 'u', 'r', 'n', 't', 's'];
+        
+        clearTimeout(prefetchTimer);
+        prefetchTimer = setTimeout(() => {
+          for (const char of commonNextChars) {
+            const prefetchQuery = query + char;
+            if (!cache.has(prefetchQuery) && prefetchQuery.length <= 6) {
+              // Prefetch in background without blocking UI
+              fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(prefetchQuery)}&maxResults=15`)
+                .then(res => res.json())
+                .then(data => cache.set(prefetchQuery, data))
+                .catch(() => {}); // Silently ignore prefetch errors
+            }
+          }
+        }, 200); // Delay prefetch to avoid overwhelming API
       }
     }
 
@@ -267,7 +382,7 @@
       // Set new timer with short delay
       debounceTimer = setTimeout(() => {
         fetchSuggestions(query);
-      }, 100); // Reduced debounce time
+      }, 50); // Ultra-fast debounce
     });
 
     bookInput.addEventListener('keydown', function(event) {
