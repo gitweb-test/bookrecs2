@@ -140,27 +140,13 @@
       const lowerTitle = title.toLowerCase();
       const lowerAuthors = authors.toLowerCase();
       
-      // Heavily prioritize titles that start with the query
-      if (lowerTitle.startsWith(lowerQuery)) {
-        return 1000; // Very high score for title starts-with
-      }
+      // Fast string matching - prioritize starts-with matches
+      const titleScore = lowerTitle.startsWith(lowerQuery) ? 100 : 
+                        lowerTitle.includes(lowerQuery) ? 50 : 0;
+      const authorScore = lowerAuthors.startsWith(lowerQuery) ? 80 : 
+                         lowerAuthors.includes(lowerQuery) ? 30 : 0;
       
-      // Medium priority for author starts-with
-      if (lowerAuthors.startsWith(lowerQuery)) {
-        return 500;
-      }
-      
-      // Lower priority for title contains
-      if (lowerTitle.includes(lowerQuery)) {
-        return 100;
-      }
-      
-      // Lowest priority for author contains
-      if (lowerAuthors.includes(lowerQuery)) {
-        return 50;
-      }
-      
-      return 0;
+      return Math.max(titleScore, authorScore);
     }
 
     function updateSelection() {
@@ -281,7 +267,7 @@
       // Set new timer with short delay
       debounceTimer = setTimeout(() => {
         fetchSuggestions(query);
-      }, 50); // Ultra-fast debounce
+      }, 100); // Reduced debounce time
     });
 
     bookInput.addEventListener('keydown', function(event) {
