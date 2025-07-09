@@ -187,6 +187,8 @@
       suggestionElements.forEach((el, index) => {
         if (index === selectedIndex) {
           el.classList.add('selected');
+          // Auto-scroll to keep selected item visible
+          el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         } else {
           el.classList.remove('selected');
         }
