@@ -396,6 +396,34 @@
       return false;
     }
 
+    // Function to check if a title contains an author name but isn't by that author
+    function titleContainsAuthorName(title, userAuthors, bookAuthors) {
+      const titleLower = title.toLowerCase();
+      const bookAuthorsLower = bookAuthors.map(a => a.toLowerCase());
+      
+      // Check if any user author name appears in the title
+      for (const userAuthor of userAuthors) {
+        const userAuthorLower = userAuthor.toLowerCase();
+        
+        // Skip single letter names or very short names to avoid false positives
+        if (userAuthorLower.length <= 2) continue;
+        
+        // Check if the user author name appears in the title
+        if (titleLower.includes(userAuthorLower)) {
+          // But make sure this book is not actually by that author
+          const isActuallyByAuthor = bookAuthorsLower.some(bookAuthor => 
+            bookAuthor === userAuthorLower
+          );
+          
+          if (!isActuallyByAuthor) {
+            return true; // Title contains author name but book is not by that author
+          }
+        }
+      }
+      
+      return false;
+    }
+
     async function getRecommendations() {
       if (isRecommendationsActive) return;
       isRecommendationsActive = true;
@@ -438,7 +466,7 @@
           const authorsList = info.authors || ["unknown"];
           const fullAuthorsStr = authorsList.join(", ").toLowerCase();
           if (titleLower.includes(lowerQuery) || lowerQuery.includes(titleLower) || fullAuthorsStr.includes(lowerQuery)) {
-            userAuthors = authorsList.map(a => a.toLowerCase());
+            userAuthors = authorsList;
             userCategories = info.categories || [];
             userTitle = info.title.toLowerCase();
             bookFound = true;
@@ -459,13 +487,18 @@
           const authorsList = info.authors;
           const authorsLower = authorsList.map(a => a.toLowerCase());
 
-          // Skip if it's the same title, contains parts of the title, or by the same author
+          // Skip if it's the same title or contains parts of the title
           if (titleLower === userTitle || 
               titleLower.includes(lowerQuery) || 
               lowerQuery.includes(titleLower) ||
               titleLower.includes(userTitle) ||
               userTitle.includes(titleLower)) continue;
-          if (hasAuthorOverlap(authorsLower, userAuthors)) continue;
+          
+          // Skip if by the same author
+          if (hasAuthorOverlap(authorsLower, userAuthors.map(a => a.toLowerCase()))) continue;
+          
+          // NEW: Skip if title contains user's author name but isn't by that author
+          if (titleContainsAuthorName(info.title, userAuthors, authorsList)) continue;
 
           let score = 0;
           if (userCategories.length > 0 && info.categories && info.categories.length > 0) {
