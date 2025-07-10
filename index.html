@@ -132,6 +132,7 @@
     let isRecommendationsActive = false; // Flag to track if recommendations are being fetched
     let selectedIndex = -1; // Track which suggestion is selected (-1 means text box is focused)
     let suggestions = []; // Store current suggestions
+    let typedQuery = ""; // Store the user's typed input
 
     function similarity(s1, s2) {
       const longer = s1.length > s2.length ? s1 : s2;
@@ -252,6 +253,7 @@
     }
 
     bookInput.addEventListener("input", async () => {
+      typedQuery = bookInput.value.trim(); // Capture the user's typed input
       const query = bookInput.value.trim();
       selectedIndex = -1; // Reset selection when typing
       
@@ -339,14 +341,14 @@
         event.preventDefault();
         if (suggestions.length > 0) {
           if (selectedIndex === -1) {
-            // From text box to first suggestion
             selectedIndex = 0;
+            bookInput.value = suggestions[0].fullText; // Show first suggestion
           } else if (selectedIndex === suggestions.length - 1) {
-            // From last suggestion back to text box
             selectedIndex = -1;
+            bookInput.value = typedQuery; // Restore typed query
           } else {
-            // Move to next suggestion
             selectedIndex++;
+            bookInput.value = suggestions[selectedIndex].fullText; // Show next suggestion
           }
           updateSelection();
         }
@@ -354,14 +356,14 @@
         event.preventDefault();
         if (suggestions.length > 0) {
           if (selectedIndex === -1) {
-            // From text box to last suggestion
             selectedIndex = suggestions.length - 1;
+            bookInput.value = suggestions[selectedIndex].fullText; // Show last suggestion
           } else if (selectedIndex === 0) {
-            // From first suggestion back to text box
             selectedIndex = -1;
+            bookInput.value = typedQuery; // Restore typed query
           } else {
-            // Move to previous suggestion
             selectedIndex--;
+            bookInput.value = suggestions[selectedIndex].fullText; // Show previous suggestion
           }
           updateSelection();
         }
