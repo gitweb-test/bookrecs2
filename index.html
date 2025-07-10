@@ -133,6 +133,7 @@
     let selectedIndex = -1; // Track which suggestion is selected (-1 means text box is focused)
     let suggestions = []; // Store current suggestions
     let typedQuery = ""; // Store the user's typed input
+    let currentRequestId = 0; // Track the current request ID
 
     function similarity(s1, s2) {
       const longer = s1.length > s2.length ? s1 : s2;
@@ -264,9 +265,16 @@
         return;
       }
 
+      currentRequestId++; // Increment request ID
+      const thisRequestId = currentRequestId; // Capture the current request ID
+
       try {
         const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`);
         const data = await res.json();
+
+        if (thisRequestId !== currentRequestId) {
+          return; // Ignore outdated response
+        }
 
         if (!data.items) {
           suggestionsBox.innerHTML = "";
