@@ -166,36 +166,63 @@
       return costs[s2.length];
     }
 
-    function calculateWeightedSimilarity(query, title, authors) {
+    function parseQuery(query) {
       const lowerQuery = query.toLowerCase();
+      const byIndex = lowerQuery.indexOf(' by ');
+      
+      if (byIndex === -1) {
+        return { title: query.trim(), author: '', hasBy: false };
+      }
+      
+      const title = query.substring(0, byIndex).trim();
+      const author = query.substring(byIndex + 4).trim();
+      
+      return { title, author, hasBy: true };
+    }
+
+    function calculateWeightedSimilarity(query, title, authors) {
+      const parsedQuery = parseQuery(query);
       const lowerTitle = title.toLowerCase();
       const lowerAuthors = authors.toLowerCase();
       const fullText = `${title} by ${authors}`.toLowerCase();
       
-      // Check if the title starts with exactly what the user typed
+      // If user typed "Title by Author", handle it specially
+      if (parsedQuery.hasBy) {
+        const titleSim = similarity(parsedQuery.title.toLowerCase(), lowerTitle);
+        const authorSim = similarity(parsedQuery.author.toLowerCase(), lowerAuthors);
+        
+        // Prioritize exact title matches with author completion
+        if (parsedQuery.title.toLowerCase() === lowerTitle) {
+          return 0.95 + (authorSim * 0.05); // Almost perfect score for exact title + author match
+        }
+        
+        // Strong title match with partial author match
+        if (titleSim > 0.85) {
+          return titleSim * 0.7 + authorSim * 0.3;
+        }
+        
+        return titleSim * 0.6 + authorSim * 0.4;
+      }
+      
+      // Original logic for queries without "by"
+      const lowerQuery = query.toLowerCase();
       const titleStartsWithQuery = lowerTitle.startsWith(lowerQuery);
       const authorStartsWithQuery = lowerAuthors.startsWith(lowerQuery);
       
-      // Calculate similarity scores
       const titleSim = similarity(lowerQuery, lowerTitle);
       const authorSim = similarity(lowerQuery, lowerAuthors);
       const fullSim = similarity(lowerQuery, fullText);
       
-      // HEAVILY prioritize titles that start with the exact query
       if (titleStartsWithQuery) {
-        // Give massive bonus for exact prefix matches
-        const prefixBonus = 0.5; // Extra boost for starting with query
+        const prefixBonus = 0.5;
         return Math.min(1.0, (titleSim * 0.95) + prefixBonus);
       }
       
-      // If author starts with query but title doesn't, still prioritize title similarity
       if (authorStartsWithQuery && !titleStartsWithQuery) {
         return (titleSim * 0.6) + (authorSim * 0.3) + (fullSim * 0.1);
       }
       
-      // For any other query, heavily prioritize title matches
       const weightedScore = (titleSim * 0.85) + (authorSim * 0.1) + (fullSim * 0.05);
-      
       return weightedScore;
     }
 
@@ -254,10 +281,13 @@
             if (!info.title || !info.authors || info.authors.length === 0) return null;
             const authors = info.authors.join(", ");
             if (authors.toLowerCase() === "unknown") return null;
+            
+            // Create clean display text
             const fullText = `${info.title} by ${authors}`;
             const key = fullText.toLowerCase();
             if (seen.has(key)) return null;
             seen.add(key);
+            
             const sim = calculateWeightedSimilarity(query, info.title, authors);
             return { fullText, title: info.title, authors, sim };
           })
