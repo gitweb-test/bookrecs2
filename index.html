@@ -327,7 +327,7 @@
           .filter(x => x !== null);
 
         candidates.sort((a, b) => b.sim - a.sim);
-        const top = candidates.slice(0, 10);
+        const top = candidates.slice(0, 5);
         
         suggestions = top; // Store suggestions
         suggestionsBox.innerHTML = "";
