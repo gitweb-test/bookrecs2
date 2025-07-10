@@ -130,7 +130,7 @@
     const bookInput = document.getElementById("bookInput");
     const suggestionsBox = document.getElementById("autocomplete-list");
     let isRecommendationsActive = false; // Flag to track if recommendations are being fetched
-    let selectedIndex = -1; // Track which suggestion is selected
+    let selectedIndex = -1; // Track which suggestion is selected (-1 means text box is focused)
     let suggestions = []; // Store current suggestions
 
     function similarity(s1, s2) {
@@ -338,13 +338,31 @@
       if (event.key === "ArrowDown") {
         event.preventDefault();
         if (suggestions.length > 0) {
-          selectedIndex = (selectedIndex + 1) % suggestions.length;
+          if (selectedIndex === -1) {
+            // From text box to first suggestion
+            selectedIndex = 0;
+          } else if (selectedIndex === suggestions.length - 1) {
+            // From last suggestion back to text box
+            selectedIndex = -1;
+          } else {
+            // Move to next suggestion
+            selectedIndex++;
+          }
           updateSelection();
         }
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
         if (suggestions.length > 0) {
-          selectedIndex = selectedIndex <= 0 ? suggestions.length - 1 : selectedIndex - 1;
+          if (selectedIndex === -1) {
+            // From text box to last suggestion
+            selectedIndex = suggestions.length - 1;
+          } else if (selectedIndex === 0) {
+            // From first suggestion back to text box
+            selectedIndex = -1;
+          } else {
+            // Move to previous suggestion
+            selectedIndex--;
+          }
           updateSelection();
         }
       } else if (event.key === "Enter") {
