@@ -134,6 +134,7 @@
     let suggestions = []; // Store current suggestions
     let typedQuery = ""; // Store the user's typed input
     let currentRequestId = 0; // Track the current request ID
+    let currentAbortController = null; // Track the current AbortController
 
     function similarity(s1, s2) {
       const longer = s1.length > s2.length ? s1 : s2;
@@ -258,18 +259,31 @@
       const query = bookInput.value.trim();
       selectedIndex = -1; // Reset selection when typing
       
-      if (query.length < 3) {
+      if (query.length < 2) {
         suggestionsBox.innerHTML = "";
         suggestionsBox.style.display = "none";
         suggestions = [];
         return;
       }
 
+      // Cancel any ongoing request
+      if (currentAbortController) {
+        currentAbortController.abort();
+      }
+
+      // Show loading state
+      suggestionsBox.innerHTML = "<div style='padding: 10px;'>Loading...</div>";
+      if (!isRecommendationsActive) {
+        suggestionsBox.style.display = "block";
+      }
+
       currentRequestId++; // Increment request ID
       const thisRequestId = currentRequestId; // Capture the current request ID
+      currentAbortController = new AbortController(); // Create new AbortController
+      const signal = currentAbortController.signal;
 
       try {
-        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`);
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30`, { signal });
         const data = await res.json();
 
         if (thisRequestId !== currentRequestId) {
@@ -335,10 +349,15 @@
           suggestionsBox.style.display = "none";
         }
       } catch (e) {
-        suggestionsBox.innerHTML = "";
-        suggestionsBox.style.display = "none";
-        suggestions = [];
-        console.error(e);
+        if (e.name === 'AbortError') {
+          return; // Ignore aborted requests
+        }
+        if (thisRequestId === currentRequestId) {
+          suggestionsBox.innerHTML = "";
+          suggestionsBox.style.display = "none";
+          suggestions = [];
+          console.error(e);
+        }
       }
     });
 
