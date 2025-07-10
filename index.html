@@ -279,17 +279,26 @@
           .map(item => {
             const info = item.volumeInfo;
             if (!info.title || !info.authors || info.authors.length === 0) return null;
+            
+            const title = info.title.trim();
             const authors = info.authors.join(", ");
             if (authors.toLowerCase() === "unknown") return null;
             
+            // Skip malformed entries where title already contains "by [author]"
+            // This prevents duplicated "by author by author" in suggestions
+            const byPattern = /\s+by\s+.+$/i;
+            if (byPattern.test(title)) {
+              return null; // Skip these entries entirely
+            }
+            
             // Create clean display text
-            const fullText = `${info.title} by ${authors}`;
+            const fullText = `${title} by ${authors}`;
             const key = fullText.toLowerCase();
             if (seen.has(key)) return null;
             seen.add(key);
             
-            const sim = calculateWeightedSimilarity(query, info.title, authors);
-            return { fullText, title: info.title, authors, sim };
+            const sim = calculateWeightedSimilarity(query, title, authors);
+            return { fullText, title: title, authors, sim };
           })
           .filter(x => x !== null);
 
