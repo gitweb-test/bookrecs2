@@ -120,6 +120,10 @@
       background-color: #e68a00;
     }
 
+    .amazon-button.no-read-more {
+      margin-left: 0px;
+    }
+
     .read-more-link {
       color: #666;
       cursor: pointer;
@@ -631,7 +635,7 @@
               <p class="book-description">${shortened}</p>
               <div class="book-buttons">
                 <span class="read-more-link" data-full-description="${description.replace(/"/g, '&quot;')}" onclick="toggleDescription(this)">${description.length > 500 ? 'Read More' : ''}</span>
-                <a href="${amazonLink}" target="_blank" rel="noopener noreferrer" class="amazon-button">Amazon</a>
+                <a href="${amazonLink}" target="_blank" rel="noopener noreferrer" class="amazon-button ${description.length <= 500 ? 'no-read-more' : ''}">Amazon</a>
               </div>
             </div>
           `;
