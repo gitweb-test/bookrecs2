@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Book Recommender</title>
+  <title>ReadNext</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
@@ -112,11 +112,22 @@
     .amazon-button:hover {
       background-color: #e68a00;
     }
+
+    .read-more-link {
+      color: #666;
+      cursor: pointer;
+      text-decoration: none;
+      margin-right: 10px;
+    }
+
+    .read-more-link:hover {
+      color: #333;
+    }
   </style>
 </head>
 <body>
-  <h1>📚 Book Recommender</h1>
-  <p>Enter a book you like and we'll recommend 10 more to check out!</p>
+  <h1>📚 ReadNext</h1>
+  <p>Enter a book you like and we'll recommend some to read next!</p>
 
   <div class="autocomplete-container">
     <input id="bookInput" type="text" placeholder="e.g. Breakfast of Champions by Kurt Vonnegut" autocomplete="off" />
@@ -251,6 +262,23 @@
         suggestions = [];
         // Immediately search for recommendations
         getRecommendations();
+      }
+    }
+
+    function toggleDescription(link) {
+      const descriptionP = link.parentElement.querySelector('.book-description');
+      const isExpanded = link.textContent === 'Read Less';
+      const fullDescription = link.getAttribute('data-full-description');
+      
+      if (isExpanded) {
+        // Show shortened description
+        const shortened = fullDescription.length > 500 ? fullDescription.slice(0, 500) + "..." : fullDescription;
+        descriptionP.innerHTML = shortened;
+        link.textContent = 'Read More';
+      } else {
+        // Show full description
+        descriptionP.innerHTML = fullDescription;
+        link.textContent = 'Read Less';
       }
     }
 
@@ -589,11 +617,17 @@
             <img src="${imageUrl}" alt="Book cover">
             <div class="book-info">
               <strong>${info.title || "No title"}</strong> by ${info.authors?.join(", ") || "Unknown"}
-              <p>${shortened}</p>
-              <a href="${info.infoLink}" target="_blank" rel="noopener noreferrer">More Info</a>
+              <p class="book-description">${shortened}</p>
+              <span class="read-more-link" data-full-description="${description.replace(/"/g, '&quot;')}" onclick="toggleDescription(this)">${description.length > 500 ? 'Read More' : ''}</span>
               <a href="${amazonLink}" target="_blank" rel="noopener noreferrer" class="amazon-button">Amazon</a>
             </div>
           `;
+          
+          // Hide the Read More link if description is short
+          if (description.length <= 500) {
+            div.querySelector('.read-more-link').style.display = 'none';
+          }
+          
           resultsDiv.appendChild(div);
         }
 
