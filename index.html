@@ -92,10 +92,16 @@
 
     .book-info {
       flex: 1;
+      display: flex;
+      flex-direction: column;
     }
 
     .book-info p {
       margin: 10px 0;
+    }
+
+    .book-buttons {
+      margin-top: auto;
     }
 
     .amazon-button {
@@ -270,7 +276,8 @@
     }
 
     function toggleDescription(link) {
-      const descriptionP = link.parentElement.querySelector('.book-description');
+      const bookInfo = link.closest('.book-info');
+      const descriptionP = bookInfo.querySelector('.book-description');
       const isExpanded = link.textContent === 'Read Less';
       const fullDescription = link.getAttribute('data-full-description');
       
@@ -620,10 +627,12 @@
           div.innerHTML = `
             <img src="${imageUrl}" alt="Book cover">
             <div class="book-info">
-              <strong>${info.title || "No title"}</strong> by ${info.authors?.join(", ") || "Unknown"}
+              <div><strong>${info.title || "No title"}</strong> by ${info.authors?.join(", ") || "Unknown"}</div>
               <p class="book-description">${shortened}</p>
-              <span class="read-more-link" data-full-description="${description.replace(/"/g, '&quot;')}" onclick="toggleDescription(this)">${description.length > 500 ? 'Read More' : ''}</span>
-              <a href="${amazonLink}" target="_blank" rel="noopener noreferrer" class="amazon-button">Amazon</a>
+              <div class="book-buttons">
+                <span class="read-more-link" data-full-description="${description.replace(/"/g, '&quot;')}" onclick="toggleDescription(this)">${description.length > 500 ? 'Read More' : ''}</span>
+                <a href="${amazonLink}" target="_blank" rel="noopener noreferrer" class="amazon-button">Amazon</a>
+              </div>
             </div>
           `;
           
